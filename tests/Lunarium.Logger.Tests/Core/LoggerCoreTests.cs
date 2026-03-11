@@ -117,7 +117,7 @@ public class LoggerCoreTests
     [Fact]
     public void FileTarget_DuplicateFilePath_ThrowsInvalidOperation()
     {
-        const string path = "/tmp/lunarium_dup_test.log";
+        var path = Path.Combine(Path.GetTempPath(), "lunarium_dup_test.log");
         var sink1 = new FileTarget(path);
         try
         {

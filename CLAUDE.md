@@ -256,6 +256,23 @@ dotnet test                    # 运行所有测试（无覆盖率）
 ./RunCoverageTest.sh --html    # 运行测试 + 生成 HTML 覆盖率报告（→ CoverageReport/html/index.html）
 ```
 
+### Benchmark 项目
+
+| 项目 | 说明 | 代码索引 |
+|------|------|----------|
+| `benchmarks/Lunarium.Logger.Benchmarks/` | 性能基准测试（Parser 缓存命中/未命中、Writer 渲染、Filter 过滤、Logger 调用方吞吐量） | `benchmarks/Lunarium.Logger.Benchmarks/Index.md` |
+
+**运行方式**：
+```bash
+# 交互式菜单选择
+dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks
+
+# 按类名过滤运行
+dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filter "*LogParser*"
+```
+
+> ⚠️ 必须以 Release 模式运行，Debug 模式结果无意义。结果自动输出至 `BenchmarkDotNet.Artifacts/`。
+
 ### 测试现状（2026-03-11）
 
 - **总测试数**: 476，全部通过，0 失败，0 跳过

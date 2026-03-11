@@ -279,7 +279,14 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
                 currentFilePath = FindLatestLogFileOrCreateNew(timestamp);
             }
 
-            _writer = new StreamWriter(currentFilePath, append: true, Encoding.UTF8, bufferSize: 2048)
+            var fs = new FileStream(
+                currentFilePath,
+                FileMode.Append,
+                FileAccess.Write,
+                FileShare.Read | FileShare.Delete,
+                bufferSize: 2048,
+                FileOptions.None);
+            _writer = new StreamWriter(fs, Encoding.UTF8, bufferSize: -1, leaveOpen: false)
             {
                 AutoFlush = false
             };
