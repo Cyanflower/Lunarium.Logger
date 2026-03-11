@@ -1,3 +1,10 @@
+# Benchmark Environment: Windows 11 PC (i7-7700)
+
+以下数据展示了 `Lunarium.Logger` 在主流桌面级处理器（Intel Core i7-7700）以及 Windows 11 环境下的微秒级性能开销与分配明细。
+
+---
+
+## 硬件信息
 
 ```
 BenchmarkDotNet v0.14.0, Windows 11 (10.0.26100.8037)
@@ -10,7 +17,7 @@ BenchmarkAt: 2026-03-12
 
 ---
 
-# FilterBenchmarks-report
+## FilterBenchmarks-report
 
 | Method                                          | Mean          | Error       | StdDev      | Median        | Ratio    | RatioSD | Gen0   | Allocated | Alloc Ratio |
 |------------------------------------------------ |--------------:|------------:|------------:|--------------:|---------:|--------:|-------:|----------:|------------:|
@@ -23,7 +30,7 @@ BenchmarkAt: 2026-03-12
 
 ---
 
-# LoggerThroughputBenchmarks-report
+## LoggerThroughputBenchmarks-report
 
 | Method                                          | Mean        | Error     | StdDev    | Ratio  | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
 |------------------------------------------------ |------------:|----------:|----------:|-------:|--------:|-------:|-------:|----------:|------------:|
@@ -36,7 +43,7 @@ BenchmarkAt: 2026-03-12
 
 ---
 
-# LogParserBenchmarks-report
+## LogParserBenchmarks-report
 
 | Method                                  | Mean         | Error      | StdDev     | Ratio    | RatioSD | Gen0   | Gen1   | Gen2   | Allocated | Alloc Ratio |
 |---------------------------------------- |-------------:|-----------:|-----------:|---------:|--------:|-------:|-------:|-------:|----------:|------------:|
@@ -49,7 +56,7 @@ BenchmarkAt: 2026-03-12
 
 ---
 
-# LogWriterBenchmarks-report
+## LogWriterBenchmarks-report
 
 | Method                                                   | Mean      | Error     | StdDev    | Median    | Ratio | RatioSD | Gen0   | Allocated | Alloc Ratio |
 |--------------------------------------------------------- |----------:|----------:|----------:|----------:|------:|--------:|-------:|----------:|------------:|
