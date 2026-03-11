@@ -272,6 +272,7 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 ```
 
 > ⚠️ 必须以 Release 模式运行，Debug 模式结果无意义。结果自动输出至 `BenchmarkDotNet.Artifacts/`。
+> ⚠️ AI 助手应当尽量避免执行 Benchmarks 测试，在执行前必须征得同意并确认，该命令执行耗时较长(10min +)。
 
 ### 测试现状（2026-03-11）
 
