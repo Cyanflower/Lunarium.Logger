@@ -46,6 +46,17 @@ public class FileTargetTests : IDisposable
         }
     }
 
+    // Windows 共享模型要求：读取仍被 FileTarget 持有的文件时，
+    // reader 的 FileShare 必须包含 Write，以允许已存在的写句柄继续持有。
+    // Linux 无此限制，但显式共享在两个平台上均能正常工作。
+    private static string ReadShared(string path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(fs, System.Text.Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
     private static LogEntry MakeEntry(string message, LogLevel level = LogLevel.Info)
     {
         return new LogEntry(
@@ -84,7 +95,7 @@ public class FileTargetTests : IDisposable
         // Error level forces an immediate flush
 
         File.Exists(_logBaseFilePath).Should().BeTrue();
-        var content = File.ReadAllText(_logBaseFilePath);
+        var content = ReadShared(_logBaseFilePath);
         content.Should().Contain("Error flush now!");
         
         target.Dispose();
@@ -233,7 +244,7 @@ public class FileTargetTests : IDisposable
         // This third entry goes entirely through the new writer → must appear in the file
         target.Emit(MakeEntry("written to new file", LogLevel.Error));
 
-        File.ReadAllText(_logBaseFilePath).Should().Contain("written to new file");
+        ReadShared(_logBaseFilePath).Should().Contain("written to new file");
 
         target.Dispose();
     }
