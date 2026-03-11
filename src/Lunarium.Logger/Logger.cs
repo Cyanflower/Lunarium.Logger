@@ -1,0 +1,163 @@
+// Copyright 2026 Cyanflower
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+using System.Threading.Channels;
+using System.Text.RegularExpressions;
+using Lunarium.Logger.Parser;
+
+namespace Lunarium.Logger;
+
+/// <summary>
+/// LunariumLogger 的核心实现。
+/// 它通过一个后台任务和 .NET Channel 异步处理日志消息，
+/// 将日志分发到所有已配置的 Sink，从而避免阻塞调用方线程。
+/// </summary>
+internal sealed class Logger : ILogger, IAsyncDisposable
+{
+    // === 内部变量 ===
+    // 传递日志消息的无界Channel，用于解耦日志写入和处理
+    private readonly Channel<LogEntry> _queue = Channel.CreateUnbounded<LogEntry>();
+    // 用于在关闭时通知后台任务停止
+    private readonly CancellationTokenSource _cancellationTokenSource = new();
+    // 负责从 Channel 读取并处理日志的后台任务
+    private readonly Task _processTask;
+
+    // === 日志配置 ===
+    // 日志记录器名称
+    private readonly string _loggerName;
+    // 所有输出目标的列表
+    private readonly List<Sink> _sinks;
+
+    /// <summary>
+    /// 初始化一个新的 LunariumLogger 实例。
+    /// </summary>
+    /// <param name="sinks">日志要发送到的 Sink 列表。</param>
+    /// <param name="loggerName">此日志记录器的名称。</param>
+    /// <param name="logMinLevel">允许记录的最低级别。</param>
+    /// <param name="callerMinLevel">记录调用者信息的最低级别。</param>
+    internal Logger(List<Sink> sinks, string loggerName)
+    {
+        _sinks = sinks;
+        _loggerName = loggerName;
+        // 启动后台处理任务
+        _processTask = Task.Run(ProcessQueueAsync);
+    }
+
+    /// <summary>
+    /// 在后台运行，持续从 Channel 中读取日志条目并分发给所有 Sink。
+    /// </summary>
+    private async Task ProcessQueueAsync()
+    {
+        try
+        {
+            await foreach (var logEntry in _queue.Reader.ReadAllAsync(_cancellationTokenSource.Token))
+            {
+                // 解包
+                foreach (var sink in _sinks)
+                {
+                    try
+                    {
+                        sink.Emit(logEntry);
+                    }
+                    catch (Exception ex)
+                    {
+                        InternalLogger.Error(ex,"ProcessQueueAsync To Sink Emit Failed:");
+                    }
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // 这是正常关闭时预期的异常，无需处理
+        }
+        catch (Exception ex)
+        {
+            InternalLogger.Error(ex,"ProcessQueueAsync Catch Exception:");
+        }
+    }
+
+    /// <summary>
+    /// 创建一个日志条目并将其放入队列中等待异步处理。
+    /// </summary>
+    public void Log(LogLevel level, string message = "", string context = "", Exception? ex = null, params object?[] propertyValues)
+    {
+        try
+        {
+            // [Debug]
+            // Console.WriteLine($"{_loggerName}: Log 被调用");
+            // 如果日志记录器正在关闭，则不再接受新的日志
+            if (_cancellationTokenSource.IsCancellationRequested) return;
+    
+            var entry = new LogEntry(
+                loggerName: _loggerName,
+                timestamp: LogTimestampConfig.GetTimestamp(),
+                logLevel: level,
+                message: message,
+                properties: propertyValues,
+                context: context,
+                messageTemplate: LogParser.EmptyMessageTemplate,
+                exception: ex
+            );
+    
+            // 尝试将日志条目写入 Channel
+            _queue.Writer.TryWrite(entry);
+        }
+        catch (Exception catchEx)
+        {
+            InternalLogger.Error(catchEx,$"Log Failed: ");
+        }
+    }
+    
+    /// <summary>
+    /// 关闭日志记录器。
+    /// 它会停止接受新的日志，等待所有已在队列中的日志处理完毕，然后释放所有 Sink 的资源。
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        // Console.WriteLine($"[LunariumLogger.Internal] Dispose: Logger is shutting down. Flushing queues...");
+        _queue.Writer.Complete();
+        _cancellationTokenSource.Cancel();
+        
+        try
+        {
+            await _processTask;
+        }
+        catch (Exception ex)
+        {
+            // 记录任务异常，但继续清理
+            Console.BackgroundColor = ConsoleColor.Red;
+            Console.ForegroundColor = ConsoleColor.White;
+            Console.WriteLine($"[LunariumLogger.InternalError] ProcessTask ended with error: {ex.Message}");
+            Console.ResetColor();
+        }
+        
+        // 即使任务失败，也要释放Sinks
+        foreach (var (sink, _ ) in _sinks)
+        {
+            try
+            {
+                sink.Dispose();
+            }
+            catch (Exception ex)
+            {            
+                Console.BackgroundColor = ConsoleColor.Red;
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine($"[LunariumLogger.InternalError] Sink disposal failed: {ex.Message}");
+                Console.ResetColor();
+            }
+        }
+        
+        _cancellationTokenSource.Dispose();
+    }
+}

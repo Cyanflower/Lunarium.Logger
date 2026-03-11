@@ -1,0 +1,63 @@
+Summary
+  Generated on: 2026/3/11 - 22:03:55
+  Coverage date: 2026/3/11 - 22:03:53 - 2026/3/11 - 22:03:54
+  Parser: MultiReport (2x Cobertura)
+  Assemblies: 1
+  Classes: 41
+  Files: 31
+  Line coverage: 91.4%
+  Covered lines: 1769
+  Uncovered lines: 166
+  Coverable lines: 1935
+  Total lines: 4642
+  Branch coverage: 89.2% (603 of 676)
+  Covered branches: 603
+  Total branches: 676
+  Method coverage: 99.1% (246 of 248)
+  Full method coverage: 87% (216 of 248)
+  Covered methods: 246
+  Fully covered methods: 216
+  Total methods: 248
+
+Lunarium.Logger                                                   91.4%
+  Lunarium.Logger.Extensions.LunariumLoggerConversionExtensions    100%
+  Lunarium.Logger.Extensions.LunariumLoggerExtensions              100%
+  Lunarium.Logger.Extensions.LunariumLoggerProvider                100%
+  Lunarium.Logger.Extensions.LunariumMsLoggerAdapter               100%
+  Lunarium.Logger.Extensions.NullScopeProvider                     100%
+  Lunarium.Logger.Filter.LoggerFilter                              100%
+  Lunarium.Logger.GlobalConfig.DestructuringConfig                 100%
+  Lunarium.Logger.GlobalConfig.GlobalConfigLock                    100%
+  Lunarium.Logger.GlobalConfig.JsonSerializationConfig            94.2%
+  Lunarium.Logger.GlobalConfig.LogTimestampConfig                 91.6%
+  Lunarium.Logger.GlobalConfig.TimestampFormatConfig               100%
+  Lunarium.Logger.GlobalConfigurator                               100%
+  Lunarium.Logger.ILogger                                          100%
+  Lunarium.Logger.Internal.LogChannelBridge<T>                     100%
+  Lunarium.Logger.InternalLoggerUtils.InternalLogger              89.3%
+  Lunarium.Logger.Logger                                          81.2%
+  Lunarium.Logger.LoggerBuilder                                   81.8%
+  Lunarium.Logger.LoggerBuilderExtensions                          100%
+  Lunarium.Logger.LoggerExtensions                                 100%
+  Lunarium.Logger.LogUtils                                         100%
+  Lunarium.Logger.Models.LogEntry                                  100%
+  Lunarium.Logger.Parser.LogParser                                93.9%
+  Lunarium.Logger.Parser.MessageTemplate                           100%
+  Lunarium.Logger.Parser.PropertyToken                             100%
+  Lunarium.Logger.Parser.TextToken                                 100%
+  Lunarium.Logger.Sink                                             100%
+  Lunarium.Logger.SinkConfig.ConsoleSinkConfig                     100%
+  Lunarium.Logger.SinkConfig.FileSinkConfig                        100%
+  Lunarium.Logger.SinkOutputConfig                                 100%
+  Lunarium.Logger.Target.ChannelTarget<T>                          100%
+  Lunarium.Logger.Target.ConsoleTarget                            89.6%
+  Lunarium.Logger.Target.DelegateChannelTarget<T>                  100%
+  Lunarium.Logger.Target.FileTarget                               77.8%
+  Lunarium.Logger.Target.LogEntryChannelTarget                     100%
+  Lunarium.Logger.Target.StringChannelTarget                       100%
+  Lunarium.Logger.Wrapper.LoggerWrapper                             90%
+  Lunarium.Logger.Writer.LogColorTextWriter                       81.9%
+  Lunarium.Logger.Writer.LogJsonWriter                            94.7%
+  Lunarium.Logger.Writer.LogTextWriter                            89.6%
+  Lunarium.Logger.Writer.LogWriter                                 100%
+  Lunarium.Logger.Writer.WriterPool                                100%
