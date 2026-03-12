@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System.Text;
-using System.Text.Json;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger.Writer;
@@ -188,16 +187,7 @@ internal sealed class LogColorTextWriter : LogWriter
             {
                 SetValueColor(value);
                 // 当遇到 {@...} 时，使用 JsonSerializer 把它变成一个易读的 JSON 字符串
-                try
-                {
-                    var jsonString = JsonSerializer.Serialize(value, JsonSerializationConfig.Options);
-                    _stringBuilder.Append(jsonString);
-                }
-                catch
-                {
-                    // 无法序列化, 输出标量
-                    _stringBuilder.Append(value is not null ? value.ToString() : "null");
-                }
+                _stringBuilder.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
                 _stringBuilder.Append(AnsiReset);
                 return; // 处理完就返回, 跳过构建格式字符串
             }

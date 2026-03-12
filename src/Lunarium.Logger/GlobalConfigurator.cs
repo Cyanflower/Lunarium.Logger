@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+
 namespace Lunarium.Logger;
 
 /// <summary>
@@ -295,6 +298,27 @@ public static class GlobalConfigurator
         public ConfigurationBuilder UseCompactJson()
         {
             AddConfigOperation(() => JsonSerializationConfig.ConfigWriteIndented(false));
+            return this;
+        }
+
+        /// <summary>
+        /// 注册自定义 JSON 类型信息解析器，用于 AOT 场景下的 Source Generated Context。
+        /// 注册后，{@Object} 解构序列化将优先使用此解析器，无需运行时反射。
+        /// </summary>
+        public ConfigurationBuilder UseJsonTypeInfoResolver(IJsonTypeInfoResolver resolver)
+        {
+            ArgumentNullException.ThrowIfNull(resolver);
+            AddConfigOperation(() => JsonSerializationConfig.ConfigCustomResolver(resolver));
+            return this;
+        }
+
+        /// <summary>
+        /// 注册 JsonSerializerContext 作为类型信息解析器（<see cref="UseJsonTypeInfoResolver(IJsonTypeInfoResolver)"/> 的语法糖）
+        /// </summary>
+        public ConfigurationBuilder UseJsonTypeInfoResolver(JsonSerializerContext context)
+        {
+            ArgumentNullException.ThrowIfNull(context);
+            AddConfigOperation(() => JsonSerializationConfig.ConfigCustomResolver(context));
             return this;
         }
 

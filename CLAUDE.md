@@ -126,7 +126,7 @@ src/Lunarium.Logger/
 │   ├── TimestampConfig.cs   # 时区配置（Local / UTC / Custom，internal）
 │   ├── TimestampFormatConfig.cs  # 时间戳格式（Unix / UnixMs / ISO8601 / Custom，internal）
 │   ├── DestructuringConfig.cs    # 集合自动解构开关（internal）
-│   └── JsonSerializationConfig.cs# JSON 序列化配置（内部转义、缩进，internal）
+│   └── JsonSerializationConfig.cs# JSON 序列化配置（内部转义、缩进、自定义 Resolver，internal）
 │
 ├── InternalLoggerUtils/
 │   └── InternalLogger.cs    # 库内部错误输出（internal static，不走 Channel，直接到控制台）
@@ -274,9 +274,9 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 > ⚠️ 必须以 Release 模式运行，Debug 模式结果无意义。结果自动输出至 `BenchmarkDotNet.Artifacts/`。
 > ⚠️ AI 助手应当尽量避免执行 Benchmarks 测试，在执行前必须征得同意并确认，该命令执行耗时较长(10min +)。
 
-### 测试现状（2026-03-11）
+### 测试现状（2026-03-13）
 
-- **总测试数**: 476，全部通过，0 失败，0 跳过
+- **总测试数**: 480，全部通过，0 失败，0 跳过（459 单元 + 21 集成）
 - **行覆盖率**: 91.5%（1772/1935 行）
 - **分支覆盖率**: 89.3%（604/676 分支）
 - **方法覆盖率**: 99.1%（246/248 个方法）
@@ -316,6 +316,8 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 - [x] InternalLogger（库内部错误隔离输出）
 - [x] ISinkConfig 配置对象注册（`ConsoleSinkConfig` / `FileSinkConfig`，通过 `builder.AddSink(ISinkConfig)` 扩展方法注册，与 Fluent 方式可互换；接口含 `CreateTarget()` 工厂方法，第三方实现可直接走统一注册路径）
 - [x] 扩展方法：`AddStringChannelSink`、`AddLogEntryChannelSink`、`AddChannelSink<T>`（自定义转换）
+- [x] AOT 兼容性支持（`IsAotCompatible=true`；`{@Object}` 解构序列化统一走 `LogWriter.TrySerializeToJson()`，附 `[UnconditionalSuppressMessage]`；`IsCommonCollectionType` 改用 `obj is Array` 消除运行时反射）
+- [x] `GlobalConfigurator.UseJsonTypeInfoResolver()`（注册 Source Generated `JsonSerializerContext` / `IJsonTypeInfoResolver`，AOT 环境下 `{@Object}` 解构无需反射；多 Context 可通过 `JsonTypeInfoResolver.Combine()` 在外部合并后传入）
 
 ---
 
@@ -358,7 +360,28 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 | Writer 层全 `internal` | 输出格式由库统一管控，不允许外部继承扩展渲染逻辑 |
 | `GlobalConfigurator` 不可扩展 | 时区/时间戳格式是跨 Sink 的全局行为，需强一致性 |
 
+### AOT 兼容性
+
+库标记了 `<IsAotCompatible>true</IsAotCompatible>`，build 时即运行 AOT/Trimming 分析器。
+
+**`{@Object}` 解构在 AOT 下的行为**：
+- 已注册 `UseJsonTypeInfoResolver`：走 Source Generated 路径，正常序列化
+- 未注册且在 AOT 下：`JsonSerializer.Serialize` 抛出后捕获，静默降级为 `ToString()`
+- 所有 `JsonSerializer.Serialize` 调用统一经过 `LogWriter.TrySerializeToJson()`（带 `[UnconditionalSuppressMessage]`），build 时零警告
+
+**用户侧配置**：
+```csharp
+[JsonSerializable(typeof(Order))]
+[JsonSerializable(typeof(User))]
+internal partial class MyLogContext : JsonSerializerContext { }
+
+GlobalConfigurator.Configure()
+    .UseJsonTypeInfoResolver(MyLogContext.Default)
+    .Apply();
+```
+
 ### 当前扩展点的已知局限
 
 1. **`GlobalConfigurator` 无自定义钩子**：无法注入自定义时间戳格式化策略，只能在自定义 `ILogTarget` 内部自行处理 `LogEntry.Timestamp`。
 2. **Writer 层全封闭**：无法继承扩展输出格式，自定义格式须从 `ILogTarget` 层重新实现渲染逻辑。
+3. **AOT 下未注册类型静默降级**：`{@Object}` 解构遇到未在 `JsonSerializerContext` 中注册的类型时，输出退化为 `ToString()`，无运行时报错。

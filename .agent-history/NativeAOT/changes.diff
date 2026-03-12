@@ -1,0 +1,521 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index d6bf9ad..efde280 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -126,7 +126,7 @@ src/Lunarium.Logger/
+ │   ├── TimestampConfig.cs   # 时区配置（Local / UTC / Custom，internal）
+ │   ├── TimestampFormatConfig.cs  # 时间戳格式（Unix / UnixMs / ISO8601 / Custom，internal）
+ │   ├── DestructuringConfig.cs    # 集合自动解构开关（internal）
+-│   └── JsonSerializationConfig.cs# JSON 序列化配置（内部转义、缩进，internal）
++│   └── JsonSerializationConfig.cs# JSON 序列化配置（内部转义、缩进、自定义 Resolver，internal）
+ │
+ ├── InternalLoggerUtils/
+ │   └── InternalLogger.cs    # 库内部错误输出（internal static，不走 Channel，直接到控制台）
+@@ -274,9 +274,9 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
+ > ⚠️ 必须以 Release 模式运行，Debug 模式结果无意义。结果自动输出至 `BenchmarkDotNet.Artifacts/`。
+ > ⚠️ AI 助手应当尽量避免执行 Benchmarks 测试，在执行前必须征得同意并确认，该命令执行耗时较长(10min +)。
+ 
+-### 测试现状（2026-03-11）
++### 测试现状（2026-03-13）
+ 
+-- **总测试数**: 476，全部通过，0 失败，0 跳过
++- **总测试数**: 480，全部通过，0 失败，0 跳过（459 单元 + 21 集成）
+ - **行覆盖率**: 91.5%（1772/1935 行）
+ - **分支覆盖率**: 89.3%（604/676 分支）
+ - **方法覆盖率**: 99.1%（246/248 个方法）
+@@ -316,6 +316,8 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
+ - [x] InternalLogger（库内部错误隔离输出）
+ - [x] ISinkConfig 配置对象注册（`ConsoleSinkConfig` / `FileSinkConfig`，通过 `builder.AddSink(ISinkConfig)` 扩展方法注册，与 Fluent 方式可互换；接口含 `CreateTarget()` 工厂方法，第三方实现可直接走统一注册路径）
+ - [x] 扩展方法：`AddStringChannelSink`、`AddLogEntryChannelSink`、`AddChannelSink<T>`（自定义转换）
++- [x] AOT 兼容性支持（`IsAotCompatible=true`；`{@Object}` 解构序列化统一走 `LogWriter.TrySerializeToJson()`，附 `[UnconditionalSuppressMessage]`；`IsCommonCollectionType` 改用 `obj is Array` 消除运行时反射）
++- [x] `GlobalConfigurator.UseJsonTypeInfoResolver()`（注册 Source Generated `JsonSerializerContext` / `IJsonTypeInfoResolver`，AOT 环境下 `{@Object}` 解构无需反射；多 Context 可通过 `JsonTypeInfoResolver.Combine()` 在外部合并后传入）
+ 
+ ---
+ 
+@@ -358,7 +360,28 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
+ | Writer 层全 `internal` | 输出格式由库统一管控，不允许外部继承扩展渲染逻辑 |
+ | `GlobalConfigurator` 不可扩展 | 时区/时间戳格式是跨 Sink 的全局行为，需强一致性 |
+ 
++### AOT 兼容性
++
++库标记了 `<IsAotCompatible>true</IsAotCompatible>`，build 时即运行 AOT/Trimming 分析器。
++
++**`{@Object}` 解构在 AOT 下的行为**：
++- 已注册 `UseJsonTypeInfoResolver`：走 Source Generated 路径，正常序列化
++- 未注册且在 AOT 下：`JsonSerializer.Serialize` 抛出后捕获，静默降级为 `ToString()`
++- 所有 `JsonSerializer.Serialize` 调用统一经过 `LogWriter.TrySerializeToJson()`（带 `[UnconditionalSuppressMessage]`），build 时零警告
++
++**用户侧配置**：
++```csharp
++[JsonSerializable(typeof(Order))]
++[JsonSerializable(typeof(User))]
++internal partial class MyLogContext : JsonSerializerContext { }
++
++GlobalConfigurator.Configure()
++    .UseJsonTypeInfoResolver(MyLogContext.Default)
++    .Apply();
++```
++
+ ### 当前扩展点的已知局限
+ 
+ 1. **`GlobalConfigurator` 无自定义钩子**：无法注入自定义时间戳格式化策略，只能在自定义 `ILogTarget` 内部自行处理 `LogEntry.Timestamp`。
+ 2. **Writer 层全封闭**：无法继承扩展输出格式，自定义格式须从 `ILogTarget` 层重新实现渲染逻辑。
++3. **AOT 下未注册类型静默降级**：`{@Object}` 解构遇到未在 `JsonSerializerContext` 中注册的类型时，输出退化为 `ToString()`，无运行时报错。
+diff --git a/CoverageReport/Summary.txt b/CoverageReport/Summary.txt
+index 23f364e..877062d 100644
+--- a/CoverageReport/Summary.txt
++++ b/CoverageReport/Summary.txt
+@@ -1,25 +1,25 @@
+ Summary
+-  Generated on: 2026/3/11 - 22:03:55
+-  Coverage date: 2026/3/11 - 22:03:53 - 2026/3/11 - 22:03:54
++  Generated on: 2026/3/13 - 02:01:42
++  Coverage date: 2026/3/13 - 02:01:37 - 2026/3/13 - 02:01:41
+   Parser: MultiReport (2x Cobertura)
+   Assemblies: 1
+   Classes: 41
+   Files: 31
+-  Line coverage: 91.4%
+-  Covered lines: 1769
+-  Uncovered lines: 166
+-  Coverable lines: 1935
+-  Total lines: 4642
+-  Branch coverage: 89.2% (603 of 676)
+-  Covered branches: 603
+-  Total branches: 676
+-  Method coverage: 99.1% (246 of 248)
+-  Full method coverage: 87% (216 of 248)
+-  Covered methods: 246
+-  Fully covered methods: 216
+-  Total methods: 248
++  Line coverage: 92.1%
++  Covered lines: 1792
++  Uncovered lines: 153
++  Coverable lines: 1945
++  Total lines: 4685
++  Branch coverage: 89% (609 of 684)
++  Covered branches: 609
++  Total branches: 684
++  Method coverage: 99.2% (250 of 252)
++  Full method coverage: 87.3% (220 of 252)
++  Covered methods: 250
++  Fully covered methods: 220
++  Total methods: 252
+ 
+-Lunarium.Logger                                                   91.4%
++Lunarium.Logger                                                   92.1%
+   Lunarium.Logger.Extensions.LunariumLoggerConversionExtensions    100%
+   Lunarium.Logger.Extensions.LunariumLoggerExtensions              100%
+   Lunarium.Logger.Extensions.LunariumLoggerProvider                100%
+@@ -28,7 +28,7 @@ Lunarium.Logger                                                   91.4%
+   Lunarium.Logger.Filter.LoggerFilter                              100%
+   Lunarium.Logger.GlobalConfig.DestructuringConfig                 100%
+   Lunarium.Logger.GlobalConfig.GlobalConfigLock                    100%
+-  Lunarium.Logger.GlobalConfig.JsonSerializationConfig            94.2%
++  Lunarium.Logger.GlobalConfig.JsonSerializationConfig             100%
+   Lunarium.Logger.GlobalConfig.LogTimestampConfig                 91.6%
+   Lunarium.Logger.GlobalConfig.TimestampFormatConfig               100%
+   Lunarium.Logger.GlobalConfigurator                               100%
+@@ -52,12 +52,12 @@ Lunarium.Logger                                                   91.4%
+   Lunarium.Logger.Target.ChannelTarget<T>                          100%
+   Lunarium.Logger.Target.ConsoleTarget                            89.6%
+   Lunarium.Logger.Target.DelegateChannelTarget<T>                  100%
+-  Lunarium.Logger.Target.FileTarget                               77.8%
++  Lunarium.Logger.Target.FileTarget                               78.5%
+   Lunarium.Logger.Target.LogEntryChannelTarget                     100%
+   Lunarium.Logger.Target.StringChannelTarget                       100%
+   Lunarium.Logger.Wrapper.LoggerWrapper                             90%
+-  Lunarium.Logger.Writer.LogColorTextWriter                       81.9%
+-  Lunarium.Logger.Writer.LogJsonWriter                            94.7%
+-  Lunarium.Logger.Writer.LogTextWriter                            89.6%
+-  Lunarium.Logger.Writer.LogWriter                                 100%
++  Lunarium.Logger.Writer.LogColorTextWriter                       83.2%
++  Lunarium.Logger.Writer.LogJsonWriter                            95.8%
++  Lunarium.Logger.Writer.LogTextWriter                            92.1%
++  Lunarium.Logger.Writer.LogWriter                                98.3%
+   Lunarium.Logger.Writer.WriterPool                                100%
+diff --git a/src/Lunarium.Logger/GlobalConfig/JsonSerializationConfig.cs b/src/Lunarium.Logger/GlobalConfig/JsonSerializationConfig.cs
+index 992be0c..be34d38 100644
+--- a/src/Lunarium.Logger/GlobalConfig/JsonSerializationConfig.cs
++++ b/src/Lunarium.Logger/GlobalConfig/JsonSerializationConfig.cs
+@@ -15,6 +15,7 @@
+ // src/Lunarium.Logger/GlobalConfig/JsonSerializationConfig.cs
+ using System.Text.Encodings.Web;
+ using System.Text.Json;
++using System.Text.Json.Serialization.Metadata;
+ using System.Text.Unicode;
+ 
+ namespace Lunarium.Logger.GlobalConfig;
+@@ -25,6 +26,7 @@ namespace Lunarium.Logger.GlobalConfig;
+ internal static class JsonSerializationConfig
+ {
+     private static JsonSerializerOptions? _options;
++    private static IJsonTypeInfoResolver? _customResolver;
+     private static readonly object _lock = new();
+ 
+     /// <summary>
+@@ -65,6 +67,15 @@ internal static class JsonSerializationConfig
+         ResetOptions();
+     }
+ 
++    /// <summary>
++    /// 配置自定义 JSON 类型信息解析器（用于 AOT 场景的 Source Generated Context）
++    /// </summary>
++    internal static void ConfigCustomResolver(IJsonTypeInfoResolver resolver)
++    {
++        _customResolver = resolver;
++        ResetOptions();
++    }
++
+     /// <summary>
+     /// 配置是否使用缩进格式
+     /// </summary>
+@@ -118,6 +129,11 @@ internal static class JsonSerializationConfig
+             options.Encoder = JavaScriptEncoder.Default;
+         }
+ 
++        if (_customResolver != null)
++        {
++            options.TypeInfoResolverChain.Add(_customResolver);
++        }
++
+         return options;
+     }
+ }
+\ No newline at end of file
+diff --git a/src/Lunarium.Logger/GlobalConfigurator.cs b/src/Lunarium.Logger/GlobalConfigurator.cs
+index 72411ac..122b28b 100644
+--- a/src/Lunarium.Logger/GlobalConfigurator.cs
++++ b/src/Lunarium.Logger/GlobalConfigurator.cs
+@@ -12,6 +12,9 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
++using System.Text.Json.Serialization;
++using System.Text.Json.Serialization.Metadata;
++
+ namespace Lunarium.Logger;
+ 
+ /// <summary>
+@@ -298,6 +301,27 @@ public static class GlobalConfigurator
+             return this;
+         }
+ 
++        /// <summary>
++        /// 注册自定义 JSON 类型信息解析器，用于 AOT 场景下的 Source Generated Context。
++        /// 注册后，{@Object} 解构序列化将优先使用此解析器，无需运行时反射。
++        /// </summary>
++        public ConfigurationBuilder UseJsonTypeInfoResolver(IJsonTypeInfoResolver resolver)
++        {
++            ArgumentNullException.ThrowIfNull(resolver);
++            AddConfigOperation(() => JsonSerializationConfig.ConfigCustomResolver(resolver));
++            return this;
++        }
++
++        /// <summary>
++        /// 注册 JsonSerializerContext 作为类型信息解析器（<see cref="UseJsonTypeInfoResolver(IJsonTypeInfoResolver)"/> 的语法糖）
++        /// </summary>
++        public ConfigurationBuilder UseJsonTypeInfoResolver(JsonSerializerContext context)
++        {
++            ArgumentNullException.ThrowIfNull(context);
++            AddConfigOperation(() => JsonSerializationConfig.ConfigCustomResolver(context));
++            return this;
++        }
++
+         #endregion
+         
+         /// <summary>
+diff --git a/src/Lunarium.Logger/Lunarium.Logger.csproj b/src/Lunarium.Logger/Lunarium.Logger.csproj
+index 1629e3a..4082028 100644
+--- a/src/Lunarium.Logger/Lunarium.Logger.csproj
++++ b/src/Lunarium.Logger/Lunarium.Logger.csproj
+@@ -7,7 +7,8 @@
+     <ImplicitUsings>enable</ImplicitUsings>
+     <Nullable>enable</Nullable>
+     <ProduceReferenceAssembly>false</ProduceReferenceAssembly>
+-
++    <IsAotCompatible>true</IsAotCompatible>
++    
+     <!-- ===== NuGet Info ===== -->
+     <Version>1.0.0</Version>
+     <Authors>Cyanflower</Authors>
+diff --git a/src/Lunarium.Logger/Writer/LogColorTextWriter.cs b/src/Lunarium.Logger/Writer/LogColorTextWriter.cs
+index 4568f96..7844d21 100644
+--- a/src/Lunarium.Logger/Writer/LogColorTextWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogColorTextWriter.cs
+@@ -13,7 +13,6 @@
+ // limitations under the License.
+ 
+ using System.Text;
+-using System.Text.Json;
+ using Lunarium.Logger.Parser;
+ 
+ namespace Lunarium.Logger.Writer;
+@@ -188,16 +187,7 @@ internal sealed class LogColorTextWriter : LogWriter
+             {
+                 SetValueColor(value);
+                 // 当遇到 {@...} 时，使用 JsonSerializer 把它变成一个易读的 JSON 字符串
+-                try
+-                {
+-                    var jsonString = JsonSerializer.Serialize(value, JsonSerializationConfig.Options);
+-                    _stringBuilder.Append(jsonString);
+-                }
+-                catch
+-                {
+-                    // 无法序列化, 输出标量
+-                    _stringBuilder.Append(value is not null ? value.ToString() : "null");
+-                }
++                _stringBuilder.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
+                 _stringBuilder.Append(AnsiReset);
+                 return; // 处理完就返回, 跳过构建格式字符串
+             }
+diff --git a/src/Lunarium.Logger/Writer/LogJsonWriter.cs b/src/Lunarium.Logger/Writer/LogJsonWriter.cs
+index 77061e5..e562b51 100644
+--- a/src/Lunarium.Logger/Writer/LogJsonWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogJsonWriter.cs
+@@ -12,7 +12,6 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
+-using System.Text.Json;
+ using System.Globalization;
+ using Lunarium.Logger.Parser;
+ 
+@@ -174,15 +173,11 @@ internal sealed class LogJsonWriter : LogWriter
+                     // 处理解构（Destructuring）
+                     if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
+                     {
+-                        try
+-                        {
+-                            var valueJson = JsonSerializer.Serialize(value, JsonSerializationConfig.Options);
++                        var valueJson = TrySerializeToJson(value);
++                        if (valueJson != null)
+                             _stringBuilder.Append(valueJson);
+-                        }
+-                        catch
+-                        {
++                        else
+                             ToJsonValue(value);
+-                        }
+                     }
+                     else
+                     {
+diff --git a/src/Lunarium.Logger/Writer/LogTextWriter.cs b/src/Lunarium.Logger/Writer/LogTextWriter.cs
+index 97cfc2f..c36cea6 100644
+--- a/src/Lunarium.Logger/Writer/LogTextWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogTextWriter.cs
+@@ -13,7 +13,6 @@
+ // limitations under the License.
+ 
+ using System.Text;
+-using System.Text.Json;
+ using Lunarium.Logger.Parser;
+ 
+ namespace Lunarium.Logger.Writer;
+@@ -136,16 +135,7 @@ internal sealed class LogTextWriter : LogWriter
+             if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
+             {
+                 // 当遇到 {@...} 时，使用 JsonSerializer 把它变成一个易读的 JSON 字符串
+-                try
+-                {
+-                    var jsonString = JsonSerializer.Serialize(value, JsonSerializationConfig.Options);
+-                    _stringBuilder.Append(jsonString); 
+-                }
+-                catch
+-                {
+-                    // 无法序列化, 输出标量
+-                    _stringBuilder.Append(value is not null ? value.ToString() : "null");
+-                }
++                _stringBuilder.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
+                 return; // 处理完就返回, 跳过构建格式字符串
+             }
+ 
+diff --git a/src/Lunarium.Logger/Writer/LogWriter.cs b/src/Lunarium.Logger/Writer/LogWriter.cs
+index d4d08fc..7acab70 100644
+--- a/src/Lunarium.Logger/Writer/LogWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogWriter.cs
+@@ -12,8 +12,11 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
+-using System.Text;
+ using System.Collections;
++using System.Diagnostics.CodeAnalysis;
++using System.Text;
++using System.Text.Json;
++using Lunarium.Logger.GlobalConfig;
+ using Lunarium.Logger.Parser;
+ 
+ namespace Lunarium.Logger.Writer;
+@@ -142,6 +145,26 @@ internal abstract class LogWriter : IDisposable
+ 
+     #endregion
+ 
++    #region --- 序列化工具 ---
++
++    /// <summary>
++    /// 将对象序列化为 JSON 字符串。序列化失败时返回 null（由调用方决定降级策略）。
++    /// 若 GlobalConfigurator 注册了 JsonTypeInfoResolver，AOT 环境下可正常工作；
++    /// 否则在 AOT 下序列化将失败并返回 null。
++    /// </summary>
++    [UnconditionalSuppressMessage("Trimming", "IL2026",
++        Justification = "Serialization failure returns null and callers fall back gracefully. " +
++                        "AOT users can register a JsonTypeInfoResolver via GlobalConfigurator.UseJsonTypeInfoResolver().")]
++    [UnconditionalSuppressMessage("AOT", "IL3050",
++        Justification = "Same as IL2026.")]
++    protected static string? TrySerializeToJson(object? value)
++    {
++        try { return JsonSerializer.Serialize(value, JsonSerializationConfig.Options); }
++        catch { return null; }
++    }
++
++    #endregion
++
+     #region --- 钩子方法：子类可选重写 ---
+     // 判断对象是否为C#核心库中常见的集合类型
+     protected static bool IsCommonCollectionType(object? obj)
+@@ -153,10 +176,8 @@ internal abstract class LogWriter : IDisposable
+         if (obj is string)
+             return false;
+ 
+-        Type type = obj.GetType();
+-
+-        // 检查是否为数组
+-        if (type.IsArray)
++        // 检查是否为数组（使用 is 模式而非反射，AOT 安全）
++        if (obj is Array)
+             return true;
+ 
+         // 检查是否实现了常见的集合接口
+diff --git a/tests/Lunarium.Logger.Tests/Config/GlobalConfiguratorTests.cs b/tests/Lunarium.Logger.Tests/Config/GlobalConfiguratorTests.cs
+index eb6d3d6..848ea88 100644
+--- a/tests/Lunarium.Logger.Tests/Config/GlobalConfiguratorTests.cs
++++ b/tests/Lunarium.Logger.Tests/Config/GlobalConfiguratorTests.cs
+@@ -13,6 +13,9 @@
+ // limitations under the License.
+ 
+ using System.Reflection;
++using System.Text.Json;
++using System.Text.Json.Serialization;
++using System.Text.Json.Serialization.Metadata;
+ using Lunarium.Logger.GlobalConfig;
+ 
+ namespace Lunarium.Logger.Tests.Config;
+@@ -38,6 +41,14 @@ public class GlobalConfiguratorTests
+         typeof(GlobalConfigurator).GetField("_isConfiguring",
+             BindingFlags.Static | BindingFlags.NonPublic);
+ 
++    private static readonly FieldInfo? _customResolverField =
++        typeof(JsonSerializationConfig).GetField("_customResolver",
++            BindingFlags.Static | BindingFlags.NonPublic);
++
++    private static readonly FieldInfo? _optionsField =
++        typeof(JsonSerializationConfig).GetField("_options",
++            BindingFlags.Static | BindingFlags.NonPublic);
++
+     /// <summary>
+     /// Reset ALL static guard state so Configure() is allowed again.
+     /// Must be called at the START of every test (and optionally at the end for hygiene).
+@@ -46,6 +57,15 @@ public class GlobalConfiguratorTests
+     {
+         GlobalConfigLock.Configured = false;
+         _isConfiguringField?.SetValue(null, false);
++        _customResolverField?.SetValue(null, null);
++        _optionsField?.SetValue(null, null);
++    }
++
++    // ─── Test helpers ─────────────────────────────────────────────────────────
++
++    private sealed class StubResolver : IJsonTypeInfoResolver
++    {
++        public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) => null;
+     }
+ 
+     // ─────────────────────────────────────────────────────────────────────────
+@@ -325,7 +345,57 @@ public class GlobalConfiguratorTests
+     }
+ 
+     // ─────────────────────────────────────────────────────────────────────────
+-    // 8. Chaining — multiple settings in one call chain
++    // 8. UseJsonTypeInfoResolver
++    // ─────────────────────────────────────────────────────────────────────────
++
++    [Fact]
++    public void UseJsonTypeInfoResolver_WithNullIJsonTypeInfoResolver_ThrowsArgumentNullException()
++    {
++        ResetAll();
++        var builder = GlobalConfigurator.Configure();
++        Action act = () => builder.UseJsonTypeInfoResolver((IJsonTypeInfoResolver)null!);
++        act.Should().Throw<ArgumentNullException>();
++        ResetAll();
++    }
++
++    [Fact]
++    public void UseJsonTypeInfoResolver_WithNullJsonSerializerContext_ThrowsArgumentNullException()
++    {
++        ResetAll();
++        var builder = GlobalConfigurator.Configure();
++        Action act = () => builder.UseJsonTypeInfoResolver((JsonSerializerContext)null!);
++        act.Should().Throw<ArgumentNullException>();
++        ResetAll();
++    }
++
++    [Fact]
++    public void UseJsonTypeInfoResolver_WithIJsonTypeInfoResolver_IsAddedToOptionsChain()
++    {
++        ResetAll();
++        var resolver = new StubResolver();
++        GlobalConfigurator.Configure()
++            .UseJsonTypeInfoResolver(resolver)
++            .Apply();
++        JsonSerializationConfig.Options.TypeInfoResolverChain
++            .Should().Contain(resolver);
++        ResetAll();
++    }
++
++    [Fact]
++    public void UseJsonTypeInfoResolver_WithJsonSerializerContext_IsAddedToOptionsChain()
++    {
++        ResetAll();
++        var context = TestLogContext.Default;
++        GlobalConfigurator.Configure()
++            .UseJsonTypeInfoResolver(context)
++            .Apply();
++        JsonSerializationConfig.Options.TypeInfoResolverChain
++            .Should().Contain(context);
++        ResetAll();
++    }
++
++    // ─────────────────────────────────────────────────────────────────────────
++    // 10. Chaining — multiple settings in one call chain
+     // ─────────────────────────────────────────────────────────────────────────
+ 
+     [Fact]
+@@ -349,7 +419,7 @@ public class GlobalConfiguratorTests
+     }
+ 
+     // ─────────────────────────────────────────────────────────────────────────
+-    // 9. ApplyDefaultIfNotConfigured — only applies once
++    // 11. ApplyDefaultIfNotConfigured — only applies once
+     // ─────────────────────────────────────────────────────────────────────────
+ 
+     [Fact]
+@@ -377,3 +447,6 @@ public class GlobalConfiguratorTests
+         ResetAll();
+     }
+ }
++
++[JsonSerializable(typeof(string))]
++internal partial class TestLogContext : JsonSerializerContext { }
+diff --git a/tests/Lunarium.Logger.Tests/Index.md b/tests/Lunarium.Logger.Tests/Index.md
+index 7dc357c..47bdcf6 100644
+--- a/tests/Lunarium.Logger.Tests/Index.md
++++ b/tests/Lunarium.Logger.Tests/Index.md
+@@ -11,6 +11,7 @@ AI 在修改核心库的代码时，可通过搜索此文档快速定位受影
+   - 时间与时区：`UseUtcTimeZone`, `UseLocalTimeZone`, `UseCustomTimezone` 设置流生效逻辑。
+   - 格式与缩进：`UseJsonUnixTimestamp`, `UseTextISO8601Timestamp` 等枚举映射验证。
+   - 特殊选项：`EnableAutoDestructuring` 开启解构，及 JSON 序列化的 `PreserveChineseCharacters`, `UseCompactJson` 生效机制。
++  - AOT 支持：`UseJsonTypeInfoResolver_WithNull*_ThrowsArgumentNullException`（两个重载各一条，防御空参数）；`UseJsonTypeInfoResolver_With*_IsAddedToOptionsChain`（验证注册的 Resolver 出现在 `TypeInfoResolverChain` 中）。
+ 
+ ### SinkOutputConfigTests.cs
+ - **目标类**: `SinkOutputConfig`

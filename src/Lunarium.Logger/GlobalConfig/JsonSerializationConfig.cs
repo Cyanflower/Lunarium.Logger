@@ -15,6 +15,7 @@
 // src/Lunarium.Logger/GlobalConfig/JsonSerializationConfig.cs
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using System.Text.Unicode;
 
 namespace Lunarium.Logger.GlobalConfig;
@@ -25,6 +26,7 @@ namespace Lunarium.Logger.GlobalConfig;
 internal static class JsonSerializationConfig
 {
     private static JsonSerializerOptions? _options;
+    private static IJsonTypeInfoResolver? _customResolver;
     private static readonly object _lock = new();
 
     /// <summary>
@@ -62,6 +64,15 @@ internal static class JsonSerializationConfig
     internal static void ConfigPreserveChineseCharacters(bool preserve)
     {
         PreserveChineseCharacters = preserve;
+        ResetOptions();
+    }
+
+    /// <summary>
+    /// 配置自定义 JSON 类型信息解析器（用于 AOT 场景的 Source Generated Context）
+    /// </summary>
+    internal static void ConfigCustomResolver(IJsonTypeInfoResolver resolver)
+    {
+        _customResolver = resolver;
         ResetOptions();
     }
 
@@ -116,6 +127,11 @@ internal static class JsonSerializationConfig
         {
             // 使用默认编码器（会转义非 ASCII 字符）
             options.Encoder = JavaScriptEncoder.Default;
+        }
+
+        if (_customResolver != null)
+        {
+            options.TypeInfoResolverChain.Add(_customResolver);
         }
 
         return options;

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-using System.Text.Json;
 using System.Globalization;
 using Lunarium.Logger.Parser;
 
@@ -174,15 +173,11 @@ internal sealed class LogJsonWriter : LogWriter
                     // 处理解构（Destructuring）
                     if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
                     {
-                        try
-                        {
-                            var valueJson = JsonSerializer.Serialize(value, JsonSerializationConfig.Options);
+                        var valueJson = TrySerializeToJson(value);
+                        if (valueJson != null)
                             _stringBuilder.Append(valueJson);
-                        }
-                        catch
-                        {
+                        else
                             ToJsonValue(value);
-                        }
                     }
                     else
                     {

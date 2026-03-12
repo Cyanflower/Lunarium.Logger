@@ -13,6 +13,9 @@
 // limitations under the License.
 
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 using Lunarium.Logger.GlobalConfig;
 
 namespace Lunarium.Logger.Tests.Config;
@@ -38,6 +41,14 @@ public class GlobalConfiguratorTests
         typeof(GlobalConfigurator).GetField("_isConfiguring",
             BindingFlags.Static | BindingFlags.NonPublic);
 
+    private static readonly FieldInfo? _customResolverField =
+        typeof(JsonSerializationConfig).GetField("_customResolver",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
+    private static readonly FieldInfo? _optionsField =
+        typeof(JsonSerializationConfig).GetField("_options",
+            BindingFlags.Static | BindingFlags.NonPublic);
+
     /// <summary>
     /// Reset ALL static guard state so Configure() is allowed again.
     /// Must be called at the START of every test (and optionally at the end for hygiene).
@@ -46,6 +57,15 @@ public class GlobalConfiguratorTests
     {
         GlobalConfigLock.Configured = false;
         _isConfiguringField?.SetValue(null, false);
+        _customResolverField?.SetValue(null, null);
+        _optionsField?.SetValue(null, null);
+    }
+
+    // ─── Test helpers ─────────────────────────────────────────────────────────
+
+    private sealed class StubResolver : IJsonTypeInfoResolver
+    {
+        public JsonTypeInfo? GetTypeInfo(Type type, JsonSerializerOptions options) => null;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -325,7 +345,57 @@ public class GlobalConfiguratorTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 8. Chaining — multiple settings in one call chain
+    // 8. UseJsonTypeInfoResolver
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void UseJsonTypeInfoResolver_WithNullIJsonTypeInfoResolver_ThrowsArgumentNullException()
+    {
+        ResetAll();
+        var builder = GlobalConfigurator.Configure();
+        Action act = () => builder.UseJsonTypeInfoResolver((IJsonTypeInfoResolver)null!);
+        act.Should().Throw<ArgumentNullException>();
+        ResetAll();
+    }
+
+    [Fact]
+    public void UseJsonTypeInfoResolver_WithNullJsonSerializerContext_ThrowsArgumentNullException()
+    {
+        ResetAll();
+        var builder = GlobalConfigurator.Configure();
+        Action act = () => builder.UseJsonTypeInfoResolver((JsonSerializerContext)null!);
+        act.Should().Throw<ArgumentNullException>();
+        ResetAll();
+    }
+
+    [Fact]
+    public void UseJsonTypeInfoResolver_WithIJsonTypeInfoResolver_IsAddedToOptionsChain()
+    {
+        ResetAll();
+        var resolver = new StubResolver();
+        GlobalConfigurator.Configure()
+            .UseJsonTypeInfoResolver(resolver)
+            .Apply();
+        JsonSerializationConfig.Options.TypeInfoResolverChain
+            .Should().Contain(resolver);
+        ResetAll();
+    }
+
+    [Fact]
+    public void UseJsonTypeInfoResolver_WithJsonSerializerContext_IsAddedToOptionsChain()
+    {
+        ResetAll();
+        var context = TestLogContext.Default;
+        GlobalConfigurator.Configure()
+            .UseJsonTypeInfoResolver(context)
+            .Apply();
+        JsonSerializationConfig.Options.TypeInfoResolverChain
+            .Should().Contain(context);
+        ResetAll();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 10. Chaining — multiple settings in one call chain
     // ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -349,7 +419,7 @@ public class GlobalConfiguratorTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 9. ApplyDefaultIfNotConfigured — only applies once
+    // 11. ApplyDefaultIfNotConfigured — only applies once
     // ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -377,3 +447,6 @@ public class GlobalConfiguratorTests
         ResetAll();
     }
 }
+
+[JsonSerializable(typeof(string))]
+internal partial class TestLogContext : JsonSerializerContext { }

@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-using System.Text;
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
+using System.Text;
+using System.Text.Json;
+using Lunarium.Logger.GlobalConfig;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger.Writer;
@@ -142,6 +145,26 @@ internal abstract class LogWriter : IDisposable
 
     #endregion
 
+    #region --- 序列化工具 ---
+
+    /// <summary>
+    /// 将对象序列化为 JSON 字符串。序列化失败时返回 null（由调用方决定降级策略）。
+    /// 若 GlobalConfigurator 注册了 JsonTypeInfoResolver，AOT 环境下可正常工作；
+    /// 否则在 AOT 下序列化将失败并返回 null。
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Serialization failure returns null and callers fall back gracefully. " +
+                        "AOT users can register a JsonTypeInfoResolver via GlobalConfigurator.UseJsonTypeInfoResolver().")]
+    [UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Same as IL2026.")]
+    protected static string? TrySerializeToJson(object? value)
+    {
+        try { return JsonSerializer.Serialize(value, JsonSerializationConfig.Options); }
+        catch { return null; }
+    }
+
+    #endregion
+
     #region --- 钩子方法：子类可选重写 ---
     // 判断对象是否为C#核心库中常见的集合类型
     protected static bool IsCommonCollectionType(object? obj)
@@ -153,10 +176,8 @@ internal abstract class LogWriter : IDisposable
         if (obj is string)
             return false;
 
-        Type type = obj.GetType();
-
-        // 检查是否为数组
-        if (type.IsArray)
+        // 检查是否为数组（使用 is 模式而非反射，AOT 安全）
+        if (obj is Array)
             return true;
 
         // 检查是否实现了常见的集合接口
