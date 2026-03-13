@@ -59,8 +59,8 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
   - `Color_MultiProperty`：四属性渲染，多属性场景下颜色代码拼接的综合开销。
 
   **LogJsonWriter（JSON 格式）**
-  - `Json_SingleProperty`：单属性 JSON 渲染，含 `OriginalMessage`、`RenderedMessage`、`Propertys` 字段序列化开销，与 `Text_SingleProperty` 对比两种格式的渲染差距。
-  - `Json_MultiProperty`：四属性 JSON 渲染，JSON 尾部逗号清除逻辑在此场景下频繁触发。
+  - `Json_SingleProperty`：单属性 JSON 渲染，基于 `Utf8JsonWriter` 测量核心序列化开销。
+  - `Json_MultiProperty`：四属性 JSON 渲染，验证 `Utf8JsonWriter` 的多属性拼接效率。
 
   **WriterPool 对象池收益**
   - `Pool_GetAndReturn`：`WriterPool.Get<LogTextWriter>()` + `WriterPool.Return()` 的往返开销（池化路径），测量 `ConcurrentBag.TryTake` 与 `Add` 的代价。
@@ -84,6 +84,22 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 
   **缓存未命中（近似）**
   - `NoRules_CacheMiss_Approx`：使用 3000 个预生成唯一 context 字符串池（超出缓存上限 2048 后触发清空），近似模拟缓存未命中场景，测量前缀匹配计算 + 字典写入开销。`LogEntry` 已在 `static` 构造器中预生成，排除构造开销干扰。
+
+---
+
+## ConfigPerformanceBenchmarks.cs
+
+- **目标类**: `SafetyClearConfig`, `AtomicOpsConfig`, `BufferWriter`, `WriterPool`
+- **测量目标**: 配置项对性能的影响
+- **架构背景**: `SafetyClear` 影响 Reset/Dispose 时的 `Array.Clear` 调用；`BufferWriterInterlocked` 影响 Dispose 时的 `Interlocked.Exchange` 调用。由于这些是静态全局配置，Benchmark 之间共享配置状态。
+- **主要 Benchmark 场景**:
+  - `FullPipeline_Default`（基准线）：完整渲染管道，使用默认配置。
+  - `Reset_IndexOnly`：仅重置索引，模拟 `SafetyClear=false`。
+  - `Reset_WithArrayClear`：含 `Array.Clear` 调用，模拟 `SafetyClear=true` 的开销。
+  - `Dispose_WithoutInterlocked`：直接 Dispose，模拟 `BufferWriterInterlocked=false`。
+  - `Dispose_WithInterlocked`：含 `Interlocked.Exchange`，模拟 `BufferWriterInterlocked=true`（双重保险）。
+  - `Pool_GetAndReturn`：池化周期（Get + Return），对比无池化场景。
+  - `Alloc_NewAndDispose`：无池化（new + Dispose），量化池化收益。
 
 ---
 

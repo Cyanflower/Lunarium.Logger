@@ -24,7 +24,9 @@ namespace Lunarium.Logger.Writer;
 internal abstract class LogWriter : IDisposable
 {
     protected readonly BufferWriter _bufferWriter;
-    private bool _disposed;
+    // 状态定义：0 = 使用中 (Active), 1 = 已释放/在池中 (Disposed/InPool)
+    // 使用 int 以便进行 Interlocked 操作
+    private int _disposedState = 0; 
     private const int DefaultMaxCapacity = 4 * 1024; // 默认4KB阈值
 
     public LogWriter()
@@ -54,9 +56,18 @@ internal abstract class LogWriter : IDisposable
 
         // 对象健康, 清理并准备重用
         _bufferWriter.Reset();
-        _disposed = false;
+
         // 如果派生类有其他状态, 它们应该重写此方法并调用 base.TryReset()
         return true;
+    }
+
+    /// <summary>
+    /// 当对象从池中取出时调用，将其标记为活跃状态
+    /// </summary>
+    internal void MarkAsActive()
+    {
+        // 使用 Volatile 确保所有 CPU 核心立即看到状态变更
+        Volatile.Write(ref _disposedState, 0);
     }
 
     #region --- 对象池归还 ---
@@ -73,13 +84,38 @@ internal abstract class LogWriter : IDisposable
     /// </summary>
     public void Dispose()
     {
-        if (_disposed) return;
-        _disposed = true;
+        // 原子检查并设置：如果当前是 0，则设为 1；如果当前已经是 1，说明已归还，直接返回
+        if (Interlocked.CompareExchange(ref _disposedState, 1, 0) != 0) 
+        {
+            return; 
+        }
 
+        // 只有抢到“从 0 变 1”权利的线程才能执行归还逻辑
         // 调用子类的归还逻辑
         ReturnToPool();
 
         GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 此方法主要用于 WriterPool 拒绝回收该对象时，确保 ArrayPool 资源不泄漏。
+    /// </summary>
+    internal void DisposeAndReturnArrayBuffer()
+    {
+        try 
+        {
+            // 增加对环境状态的判断：如果进程正在关闭，归还 ArrayPool 可能不再安全或不再必要
+            if (Environment.HasShutdownStarted) return;
+            // 直接释放内部缓冲区
+            // 注意：_bufferWriter.Dispose() 内部已经处理了幂等性（多次调用安全）
+            _bufferWriter?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            // 析构函数中绝不能抛出异常，否则会导致进程崩溃
+            // 我们通过内部日志记录（如果此时内部日志记录器还能用的话）
+            InternalLogger.Error(ex, "Error in LogWriter Finalizer");
+        }
     }
 
     // 抽象方法: 子类负责归还到自己的池
@@ -213,4 +249,17 @@ internal abstract class LogWriter : IDisposable
                obj is IDictionary;
     }
     #endregion
+
+    /// <summary>
+    /// 析构函数：确保 ArrayPool 资源不泄漏
+    /// </summary>
+    ~LogWriter()
+    {
+        // 万一用户忘了写 using，对象被 GC 时也要把数组还回去
+        // 否则 ArrayPool 会随着时间推移被耗尽
+        if (_bufferWriter != null)
+        {
+            DisposeAndReturnArrayBuffer();
+        }
+    }
 }

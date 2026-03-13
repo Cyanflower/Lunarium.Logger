@@ -13,11 +13,31 @@
 // limitations under the License.
 
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Lunarium.Logger.Internal;
+
+#if DEBUG
+// [DEBUG] Diagnostic utilities for testing BufferWriter behavior
+internal static class BufferWriterDiagnostics
+{
+    internal static ConcurrentBag<BufferWriter> Diagnostics { get; } = new();
+
+    /// <summary>Check if any BufferWriter has ReturnCount > 1 (double return)</summary>
+    internal static bool HasAnyDoubleReturn()
+        => Diagnostics.Any(bw => Volatile.Read(ref bw._diagnosticReturnCount) > 1);
+
+    /// <summary>Sum of all BufferWriter return counts</summary>
+    internal static int TotalReturnCount()
+        => Diagnostics.Sum(bw => Volatile.Read(ref bw._diagnosticReturnCount));
+
+    /// <summary>Clear diagnostic collection (call before tests)</summary>
+    internal static void Clear() => Diagnostics.Clear();
+}
+#endif
 
 internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
 {
@@ -25,10 +45,19 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
     private byte[] _buffer;
     private int _index;
 
+#if DEBUG
+    // [DEBUG] Diagnostic: track ArrayPool.Return count per instance
+    internal int _diagnosticReturnCount = 0;
+#endif
+
     internal BufferWriter(int capacity = 4096)
     {
         _buffer = ArrayPool<byte>.Shared.Rent(capacity);
         _index = 0;
+#if DEBUG
+        // [DEBUG]
+        BufferWriterDiagnostics.Diagnostics.Add(this);
+#endif
     }
 
     // ===== 低级 IBufferWriter<byte> API =====
@@ -204,6 +233,10 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
             if (SafetyClearConfig.SafetyClear)
                 buffer.AsSpan(0, _index).Clear();
             ArrayPool<byte>.Shared.Return(buffer);
+#if DEBUG
+            // [DEBUG]
+            Interlocked.Increment(ref _diagnosticReturnCount);
+#endif
         }
     }
 
@@ -219,10 +252,16 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
                 if ((uint)newSize > MAX_ARRAY_SIZE)
                     throw new OutOfMemoryException("Requested buffer size exceeds maximum array length.");
             }
+
             byte[] newBuffer = ArrayPool<byte>.Shared.Rent(newSize);
             _buffer.AsSpan(0, _index).CopyTo(newBuffer);
-            ArrayPool<byte>.Shared.Return(_buffer);
+
+            byte[] oldBuffer = _buffer;
             _buffer = newBuffer;
+
+            if (SafetyClearConfig.SafetyClear) oldBuffer.AsSpan(0, _index).Clear();
+            
+            ArrayPool<byte>.Shared.Return(oldBuffer);
         }
     }
 }

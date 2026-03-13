@@ -51,6 +51,7 @@ internal static class WriterPool
             if (_pool.TryTake(out var writer))
             {
                 Interlocked.Decrement(ref _count);
+                writer.MarkAsActive();
                 return writer;
             }
             // 池为空则返回新对象
@@ -66,7 +67,8 @@ internal static class WriterPool
             // 这样就可以了
             if (Volatile.Read(ref _count) >= PoolMaxSize)
             {
-                // 直接返回, 不回池内
+                // 直接返回并清理, 不回池内
+                writer.DisposeAndReturnArrayBuffer();
                 return;
             }
             // 对象大小是否超限
@@ -76,6 +78,11 @@ internal static class WriterPool
                 // 减少短暂超出 PoolMaxSize 的幅度
                 Interlocked.Increment(ref _count);
                 _pool.Add(writer);
+            }
+            else
+            {
+                // 直接清理, 不回池内
+                writer.DisposeAndReturnArrayBuffer();
             }
         }
     }

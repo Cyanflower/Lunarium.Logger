@@ -274,24 +274,24 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 > ⚠️ 必须以 Release 模式运行，Debug 模式结果无意义。结果自动输出至 `BenchmarkDotNet.Artifacts/`。
 > ⚠️ AI 助手应当尽量避免执行 Benchmarks 测试，在执行前必须征得同意并确认，该命令执行耗时较长(10min +)。
 
-### 测试现状（2026-03-13）
+### 测试现状（2026-03-14）
 
-- **总测试数**: 480，全部通过，0 失败，0 跳过（459 单元 + 21 集成）
-- **行覆盖率**: 91.5%（1772/1935 行）
-- **分支覆盖率**: 89.3%（604/676 分支）
-- **方法覆盖率**: 99.1%（246/248 个方法）
+- **总测试数**: 503，全部通过，0 失败，0 跳过（482 单元 + 21 集成）
+- **行覆盖率**: 91.2%（1918/2102 行）
+- **分支覆盖率**: 86.9%（615/707 分支）
+- **方法覆盖率**: 98.6%（296/300 个方法）
 
 覆盖率较低的模块（< 90%）：
 
 | 模块 | 覆盖率 |
 |------|--------|
-| `FileTarget` | 77.8% |
+| `FileTarget` | 78.1% |
+| `LogWriter` | 78.4% |
 | `Logger` | 81.2% |
 | `LoggerBuilder` | 81.8% |
-| `LogColorTextWriter` | 81.9% |
+| `LogColorTextWriter` | 84.1% |
 | `InternalLogger` | 89.3% |
-| `LogTextWriter` | 89.6% |
-| `ConsoleTarget` | 89.6% |
+| `BufferWriterDiagnostics` | 75% |
 
 覆盖率报告生成：`reportgenerator` → `CoverageReport/Summary.txt`
 
@@ -373,17 +373,13 @@ _bufferWriter.Append("] ");
 
 #### LogJsonWriter
 
-`WriteTimestamp`、`WriteLevel`、`ToJsonValue` 中的所有数值类型（`int/long/short/byte/uint/ulong/ushort/sbyte/decimal`、`double/float`）替换为 `AppendFormattable`：
+已重构为使用 **`Utf8JsonWriter`**（.NET BCL）代替手动构建，具有以下特点：
+- **正确性**：自动处理所有 JSON 转义规则，完美支持 **Surrogate Pairs（Emoji）**。
+- **高性能**：通过 `JsonWriter.Reset(_bufferWriter)` 实现池化复用，零分配。
+- **解构优化**：`{@Object}` 解构直接调用 `JsonSerializer.Serialize(jsonWriter, value)` 写入缓冲区，消除中间字符串。
+- **配置同步**：使用 `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` 以支持中文与 Emoji 不被过度转义。
+- **零分配格式化**：时间戳、数值等依然通过 `Utf8JsonWriter` 的底层 IUtf8SpanFormattable 路径（内部实现）实现零分配写入。
 
-```csharp
-// 旧：ToString(InvariantCulture) + Append
-_bufferWriter.Append(i.ToString(CultureInfo.InvariantCulture));
-
-// 新：零分配直接写
-_bufferWriter.AppendFormattable(i);
-```
-
-特殊处理（`double.IsNaN`/`Infinity`）保留为字符串 `Append("\"NaN\"")`。`Guid`/`DateTimeOffset`/`DateTime` 改用 `AppendFormattable`。
 
 `AppendJsonStringContent` 的控制字符转义（`c < 0x20`）改用：
 
@@ -443,7 +439,8 @@ public ConsoleTarget()
 }
 ```
 
-`Emit` 调用 `logWriter.FlushTo(stream)` 直接写入字节流，`Dispose` 释放两个 Stream。
+`Emit` 调用 `logWriter.FlushTo(stream)` 直接写入字节流。`Dispose` 已改为不执行任何操作（由运行时管理进程句柄）。
+测试支持：提供 `internal ConsoleTarget(Stream, Stream)` 构造函数以支持 `MemoryStream` 注入测试。
 
 #### FileTarget 改造
 

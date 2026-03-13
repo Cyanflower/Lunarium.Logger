@@ -40,6 +40,13 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
         _stderr = Console.OpenStandardError();
     }
 
+    // 供测试使用的内部构造函数
+    internal ConsoleTarget(Stream stdout, Stream stderr)
+    {
+        _stdout = stdout;
+        _stderr = stderr;
+    }
+
     /// <summary>
     /// 格式化日志条目并将其写入控制台。
     /// </summary>
@@ -83,11 +90,7 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
     }
 
     /// <summary>
-    /// 释放控制台字节流资源。
+    /// 空方法，控制台底层流由 .NET 运行时管理，进程级的句柄不应当由此处来管理。
     /// </summary>
-    public void Dispose()
-    {
-        _stdout.Dispose();
-        _stderr.Dispose();
-    }
+    public void Dispose() { }
 }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System.Text;
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Lunarium.Logger.Models;
@@ -28,37 +29,26 @@ public class ConsoleTestsCollectionDef { }
 [Collection("ConsoleTests")]
 public class ConsoleSinkTests : IDisposable
 {
-    private readonly TextWriter _originalOut;
-    private readonly TextWriter _originalError;
-    private readonly StringWriter _outWriter;
-    private readonly StringWriter _errorWriter;
+    private readonly MemoryStream _stdoutStream;
+    private readonly MemoryStream _stderrStream;
     private readonly ConsoleTarget _target;
 
     public ConsoleSinkTests()
     {
-        // Save original streams
-        _originalOut = Console.Out;
-        _originalError = Console.Error;
-
-        // Hijack
-        _outWriter = new StringWriter();
-        _errorWriter = new StringWriter();
-        Console.SetOut(_outWriter);
-        Console.SetError(_errorWriter);
-
-        _target = new ConsoleTarget();
+        _stdoutStream = new MemoryStream();
+        _stderrStream = new MemoryStream();
+        _target = new ConsoleTarget(_stdoutStream, _stderrStream);
     }
 
     public void Dispose()
     {
-        // Restore original streams
-        Console.SetOut(_originalOut);
-        Console.SetError(_originalError);
-
-        _outWriter.Dispose();
-        _errorWriter.Dispose();
-        _target.Dispose(); // Should be a no-op, just for coverage completely
+        _stdoutStream.Dispose();
+        _stderrStream.Dispose();
+        _target.Dispose();
     }
+
+    private string GetStdout() => Encoding.UTF8.GetString(_stdoutStream.ToArray());
+    private string GetStderr() => Encoding.UTF8.GetString(_stderrStream.ToArray());
 
     private static LogEntry MakeEntry(LogLevel level, string message)
     {
@@ -80,11 +70,8 @@ public class ConsoleSinkTests : IDisposable
         var entry = MakeEntry(LogLevel.Info, "Hello out");
         _target.Emit(entry);
 
-        var output = _outWriter.ToString();
-        var error = _errorWriter.ToString();
-
-        output.Should().Contain("Hello out");
-        error.Should().BeEmpty();
+        GetStdout().Should().Contain("Hello out");
+        GetStderr().Should().BeEmpty();
     }
 
     [Fact]
@@ -93,11 +80,8 @@ public class ConsoleSinkTests : IDisposable
         var entry = MakeEntry(LogLevel.Error, "Hello error");
         _target.Emit(entry);
 
-        var output = _outWriter.ToString();
-        var error = _errorWriter.ToString();
-
-        error.Should().Contain("Hello error");
-        output.Should().BeEmpty();
+        GetStderr().Should().Contain("Hello error");
+        GetStdout().Should().BeEmpty();
     }
 
     [Fact]
@@ -106,8 +90,7 @@ public class ConsoleSinkTests : IDisposable
         var entry = MakeEntry(LogLevel.Critical, "Hello fatal");
         _target.Emit(entry);
 
-        var error = _errorWriter.ToString();
-        error.Should().Contain("Hello fatal");
+        GetStderr().Should().Contain("Hello fatal");
     }
 
     [Fact]
@@ -117,7 +100,7 @@ public class ConsoleSinkTests : IDisposable
         _target.ToJson = true;
         _target.Emit(entry);
 
-        var output = _outWriter.ToString();
+        var output = GetStdout();
         // Since we are checking JSON format:
         output.Should().Contain("\"Level\":\"Debug\"");
         output.Should().Contain("\"OriginalMessage\":\"Hello json\"");
@@ -126,11 +109,13 @@ public class ConsoleSinkTests : IDisposable
     [Fact]
     public void Emit_WithIsColorFalse_OutputsPlainTextWithoutAnsi()
     {
-        var target = new ConsoleTarget { IsColor = false };
+        using var stdout = new MemoryStream();
+        using var stderr = new MemoryStream();
+        var target = new ConsoleTarget(stdout, stderr) { IsColor = false };
         var entry = MakeEntry(LogLevel.Info, "plain text test");
         target.Emit(entry);
 
-        var output = _outWriter.ToString();
+        var output = Encoding.UTF8.GetString(stdout.ToArray());
         output.Should().Contain("plain text test");
         output.Should().NotContain("\x1b[");
     }
@@ -138,23 +123,27 @@ public class ConsoleSinkTests : IDisposable
     [Fact]
     public void Emit_WithToJsonAndErrorLevel_OutputsJsonToErrorStream()
     {
-        var target = new ConsoleTarget { ToJson = true };
+        using var stdout = new MemoryStream();
+        using var stderr = new MemoryStream();
+        var target = new ConsoleTarget(stdout, stderr) { ToJson = true };
         var entry = MakeEntry(LogLevel.Error, "json error message");
         target.Emit(entry);
 
-        _errorWriter.ToString().Should().Contain("\"Level\":\"Error\"");
-        _outWriter.ToString().Should().BeEmpty();
+        Encoding.UTF8.GetString(stderr.ToArray()).Should().Contain("\"Level\":\"Error\"");
+        Encoding.UTF8.GetString(stdout.ToArray()).Should().BeEmpty();
     }
 
     [Fact]
     public void Emit_ToJson_CanBeToggledAtRuntime()
     {
-        var target = new ConsoleTarget { ToJson = true };
+        using var stdout = new MemoryStream();
+        using var stderr = new MemoryStream();
+        var target = new ConsoleTarget(stdout, stderr) { ToJson = true };
         target.Emit(MakeEntry(LogLevel.Info, "first json"));
         target.ToJson = false;
         target.Emit(MakeEntry(LogLevel.Info, "second plain"));
 
-        var output = _outWriter.ToString();
+        var output = Encoding.UTF8.GetString(stdout.ToArray());
         output.Should().Contain("\"Level\"");       // first was JSON
         output.Should().Contain("second plain");    // second was plain text
     }

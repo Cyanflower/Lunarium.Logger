@@ -7,7 +7,8 @@ AI 在修改与物理 I/O 环境强相关的底层逻辑时，可通过搜索此
 ### ConsoleSinkTests.cs
 - **目标类**: `ConsoleTarget`
 - **主要测试场景**:
-  - 输出流分发：验证 `Info` 级进入标准输出 (`Console.Out`)，`Error` 与 `Critical` 级进入标准错误 (`Console.Error`) 的分离规则。
+  - 输出流注入：不再拦截全局 `Console.Out`，改为通过 `internal` 构造函数向 `ConsoleTarget` 注入自定义 `MemoryStream` 以验证输出逻辑。
+  - 输出流分发：验证 `Info` 级进入标准输出，`Error` 与 `Critical` 级进入标准错误的路由规则。
   - 格式输出保障：`Emit_WithJson_OutputsJsonFormat` 检测开启 JSON 开关时能否获得预期的键值结构内容；以及关闭颜色选项 (`IsColor = false`) 时是否能洁净剥离 ANSI 转义符直接打印裸文 (`Emit_WithIsColorFalse_OutputsPlainTextWithoutAnsi`)。
   - 流级与格式多重组合：`Emit_WithToJsonAndErrorLevel_OutputsJsonToErrorStream` 检测错误流时开启 JSON 并不干扰 JSON 的输出到正确的目标端点。
   - 动态切换机制：`Emit_ToJson_CanBeToggledAtRuntime` 检查实例内运行时切换 ToJson 标识位是否即时且正确的生效于下一条记录。

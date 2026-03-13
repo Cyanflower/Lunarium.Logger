@@ -18,8 +18,6 @@ internal static class AtomicOpsConfig
 {
     internal static bool BufferWriterDisposeInterlocked { get; private set; } = false;
 
-    internal static bool WriterPoolInterlocked { get; private set; } = false;
-
     internal static void EnableBufferWriterInterlocked()
     {
         BufferWriterDisposeInterlocked = true;
@@ -28,15 +26,5 @@ internal static class AtomicOpsConfig
     internal static void DisableBufferWriterInterlocked()
     {
         BufferWriterDisposeInterlocked = false;
-    }
-
-    internal static void EnableWriterPoolInterlocked()
-    {
-        WriterPoolInterlocked = true;
-    }
-
-    internal static void DisableWriterPoolInterlocked()
-    {
-        WriterPoolInterlocked = false;
     }
 }

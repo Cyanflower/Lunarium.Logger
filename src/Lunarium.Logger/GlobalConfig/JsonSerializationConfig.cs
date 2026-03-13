@@ -112,16 +112,14 @@ internal static class JsonSerializationConfig
             DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never
         };
 
-        // 配置编码器以支持中文
+        // 配置编码器
+        // 对于日志输出场景，使用 UnsafeRelaxedJsonEscaping 是安全的：
+        // - 日志文件不会被嵌入到 HTML/JS 中执行
+        // - 允许所有 Unicode 字符（包括 Emoji、中文等）直接输出
+        // - 仅转义 JSON 必须转义的字符（" \ 控制字符）
         if (PreserveChineseCharacters)
         {
-            options.Encoder = JavaScriptEncoder.Create(
-                UnicodeRanges.BasicLatin,
-                UnicodeRanges.CjkUnifiedIdeographs,           // 中日韩统一表意文字
-                UnicodeRanges.CjkUnifiedIdeographsExtensionA, // CJK 扩展 A
-                UnicodeRanges.CjkCompatibilityIdeographs,     // CJK 兼容汉字
-                UnicodeRanges.CjkSymbolsandPunctuation        // CJK 符号和标点
-            );
+            options.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
         }
         else
         {
