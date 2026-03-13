@@ -13,7 +13,6 @@
 // limitations under the License.
 
 using System.Collections.Concurrent;
-using System.Text;
 using System.Text.RegularExpressions;
 
 using Lunarium.Logger.Writer;
@@ -23,6 +22,7 @@ namespace Lunarium.Logger.Target;
 /// <summary>
 /// 一个将日志写入文件的 Target，同时支持按文件大小和/或按天进行轮转。
 /// 两种轮转策略可独立启用，也可同时启用（任一条件触发即轮转）。
+/// Writer 层渲染的 UTF-8 字节直接写入 FileStream，无 StreamWriter 中间缓冲。
 /// </summary>
 public sealed class FileTarget : ILogTarget, IJsonTextTarget
 {
@@ -54,7 +54,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
 
     // === 当前文件状态 ===
     private string? _currentLogFilePath;
-    private StreamWriter? _writer;
+    private FileStream? _fileStream;
     // 当前文件字节数（仅在 maxFileSize > 0 时有意义）
     private long _currentFileSize;
     // 当前文件对应的日期（仅在 rotateOnNewDay 时有意义）
@@ -127,7 +127,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
             {
                 if (_disposed) return;
                 EnsureFileExists();
-                _writer?.Flush();
+                _fileStream?.Flush();
             }
         }
         catch (Exception ex)
@@ -151,24 +151,24 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
             {
                 CheckForRotation(entry.Timestamp);
 
-                if (_writer == null)
+                if (_fileStream == null)
                 {
-                    InternalLogger.Error("Log Writer FAILED: _writer is null");
+                    InternalLogger.Error("Log Writer FAILED: _fileStream is null");
                     return;
                 }
 
-                logWriter.FlushTo(_writer);
+                logWriter.FlushTo(_fileStream);
 
                 // 分级刷新策略
                 if (entry.LogLevel >= LogLevel.Error)
                 {
                     EnsureFileExists();
-                    _writer.Flush();
+                    _fileStream.Flush();
                 }
             }
 
-            // 更新当前文件大小，使用 BaseStream.Position 更准确
-            _currentFileSize = _writer?.BaseStream.Position ?? _currentFileSize;
+            // 更新当前文件大小
+            _currentFileSize = _fileStream?.Position ?? _currentFileSize;
         }
         catch (IOException ex)
         {
@@ -178,7 +178,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
             CloseCurrentWriter();
             OpenFile(entry.Timestamp);
 
-            if (_writer != null && _maxFile > 0)
+            if (_fileStream != null && _maxFile > 0)
             {
                 CleanupOldFiles();
             }
@@ -190,7 +190,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
     /// </summary>
     private void EnsureFileExists()
     {
-        if (_writer == null)
+        if (_fileStream == null)
         {
             OpenFile(DateTimeOffset.Now);
             return;
@@ -198,7 +198,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
 
         try
         {
-            _ = _writer.BaseStream.Position;
+            _ = _fileStream.Position;
 
             if (!File.Exists(_currentLogFilePath))
             {
@@ -218,7 +218,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
     /// </summary>
     private void CheckForRotation(DateTimeOffset timestamp)
     {
-        if (_writer == null)
+        if (_fileStream == null)
         {
             OpenFile(timestamp);
             return;
@@ -237,7 +237,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
             CloseCurrentWriter();
             OpenFile(timestamp);
 
-            if (_writer != null && _maxFile > 0)
+            if (_fileStream != null && _maxFile > 0)
             {
                 CleanupOldFiles();
             }
@@ -279,17 +279,13 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
                 currentFilePath = FindLatestLogFileOrCreateNew(timestamp);
             }
 
-            var fs = new FileStream(
+            _fileStream = new FileStream(
                 currentFilePath,
                 FileMode.Append,
                 FileAccess.Write,
                 FileShare.Read | FileShare.Delete,
-                bufferSize: 2048,
+                bufferSize: 4096,
                 FileOptions.None);
-            _writer = new StreamWriter(fs, Encoding.UTF8, bufferSize: -1, leaveOpen: false)
-            {
-                AutoFlush = false
-            };
 
             _currentFileSize = File.Exists(currentFilePath) ? new FileInfo(currentFilePath).Length : 0;
             _currentLogFilePath = currentFilePath;
@@ -298,7 +294,7 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
         catch (Exception ex)
         {
             InternalLogger.Error(ex, "Failed to open log file:");
-            _writer = null;
+            _fileStream = null;
         }
     }
 
@@ -381,13 +377,13 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
     }
 
     /// <summary>
-    /// 安全地关闭并释放当前的 StreamWriter。
+    /// 安全地关闭并释放当前的 FileStream。
     /// </summary>
     private void CloseCurrentWriter()
     {
-        _writer?.Flush();
-        _writer?.Dispose();
-        _writer = null;
+        _fileStream?.Flush();
+        _fileStream?.Dispose();
+        _fileStream = null;
     }
 
     /// <summary>

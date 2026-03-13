@@ -20,14 +20,25 @@ namespace Lunarium.Logger.Target;
 /// 一个将日志条目输出到标准控制台的 Target。
 /// 它会使用 ANSI 颜色代码来格式化不同级别的日志，使其更易于阅读。
 /// 它支持纯文本和 JSON 两种输出模式，并对结构化数据进行智能染色。
+/// 输出通过底层字节流写入，避免 char→byte 中间转换。
 /// </summary>
 public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarget
 {
     // 线程安全锁，以防止多条日志消息的输出在控制台中交错
     private readonly Lock _lock = new();
 
+    // 缓存底层字节流，避免每次 Emit 时重复调用 OpenStandard*()
+    private readonly Stream _stdout;
+    private readonly Stream _stderr;
+
     public bool ToJson { get; set; } = false;
     public bool IsColor { get; set; } = true;
+
+    public ConsoleTarget()
+    {
+        _stdout = Console.OpenStandardOutput();
+        _stderr = Console.OpenStandardError();
+    }
 
     /// <summary>
     /// 格式化日志条目并将其写入控制台。
@@ -56,11 +67,9 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
             logWriter.Render(entry);
 
             // 选择输出流
-            TextWriter output = entry.LogLevel >= LogLevel.Error 
-                ? Console.Error 
-                : Console.Out;
+            Stream output = entry.LogLevel >= LogLevel.Error ? _stderr : _stdout;
 
-            // 4. 输出
+            // 输出
             lock (_lock)
             {
                 logWriter.FlushTo(output);
@@ -68,13 +77,17 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
         }
         finally
         {
-            // 5. 归还对象池
+            // 归还对象池
             logWriter.Return();
         }
     }
-    
+
     /// <summary>
-    /// 释放资源。控制台输出不需要特殊的资源清理操作。
+    /// 释放控制台字节流资源。
     /// </summary>
-    public void Dispose() { } // 控制台不需要释放资源
+    public void Dispose()
+    {
+        _stdout.Dispose();
+        _stderr.Dispose();
+    }
 }

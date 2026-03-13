@@ -321,6 +321,200 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 
 ---
 
+## 性能优化（2026-03-13）
+
+### BufferWriter 字节缓冲层
+
+`Writer/LogWriter` 的底层从 `StringBuilder` 改为基于 `ArrayPool<byte>.Shared` 的 `BufferWriter`（[Internal/BufferWriter.cs](src/Lunarium.Logger/Internal/BufferWriter.cs)），消除 UTF-16 → UTF-8 的中间转换开销。
+
+#### 高级 API 新增
+
+| 方法 | 说明 |
+|------|------|
+| `Append(string?)` | UTF-8 编码后追加 |
+| `Append(char)` | ASCII 走快速路径（单字节写入），非 ASCII 调用 `AppendSpan(stackalloc char[1])` |
+| `Append(object?)` | 调用 `ToString()` 后编码 |
+| `AppendSpan(ReadOnlySpan<char>)` | char span → UTF-8 编码 |
+| `AppendLine()` | 追加 `Environment.NewLine` |
+| `AppendFormat(string, object?)` | `string.Format(InvariantCulture, format, arg)` |
+| `AppendFormattable<T>` | **零分配**：`IUtf8SpanFormattable` 直接格式化到 UTF-8 字节（`TryFormat` 直接写缓冲区） |
+| `RemoveLast(int)` | 移除末尾 N 字节（`_index -= count`） |
+| `Remove(int, int)` | 中间移除（`Buffer.BlockCopy` 前移） |
+| `FlushTo(Stream)` | **零拷贝**：`stream.Write(_buffer, 0, _index)` |
+| `WrittenSpan` | 只读视图，`new ReadOnlySpan<byte>(_buffer, 0, _index)` |
+| `Length` | 等价于 `WrittenCount` |
+| `this[int]` | 字节索引器（JSON 尾部逗号检查） |
+
+#### 对象池化改造
+
+[Writer/WriterPool.cs](src/Lunarium.Logger/Writer/WriterPool.cs) 的健康度检查从 `_stringBuilder.Capacity` 改为 `_bufferWriter.Capacity`，语义不变（容量上限超过 4KB 不回池）。
+
+---
+
+### IUtf8SpanFormattable 零分配格式化
+
+文本/JSON Writer 的时间戳、数值、Guid 等类型改用 `AppendFormattable<T>`，完全跳过 `ToString()` 分配。
+
+#### LogTextWriter / LogColorTextWriter
+
+`WriteTimestamp` 改造：
+
+```csharp
+// 旧：string 插值
+_bufferWriter.Append($"[{timestamp:O}] ");
+
+// 新：IUtf8SpanFormattable 直接写 UTF-8
+_bufferWriter.Append('[');
+_bufferWriter.AppendFormattable(timestamp, "O");
+_bufferWriter.Append("] ");
+```
+
+所有数值类型（`long` Unix/UnixMs）均零字符串分配。
+
+#### LogJsonWriter
+
+`WriteTimestamp`、`WriteLevel`、`ToJsonValue` 中的所有数值类型（`int/long/short/byte/uint/ulong/ushort/sbyte/decimal`、`double/float`）替换为 `AppendFormattable`：
+
+```csharp
+// 旧：ToString(InvariantCulture) + Append
+_bufferWriter.Append(i.ToString(CultureInfo.InvariantCulture));
+
+// 新：零分配直接写
+_bufferWriter.AppendFormattable(i);
+```
+
+特殊处理（`double.IsNaN`/`Infinity`）保留为字符串 `Append("\"NaN\"")`。`Guid`/`DateTimeOffset`/`DateTime` 改用 `AppendFormattable`。
+
+`AppendJsonStringContent` 的控制字符转义（`c < 0x20`）改用：
+
+```csharp
+// 旧：ToString("x4") + Append
+_bufferWriter.Append("\\u");
+_bufferWriter.Append(((int)c).ToString("x4"));
+
+// 新：零分配十六进制格式化
+_bufferWriter.Append("\\u");
+_bufferWriter.AppendFormattable((int)c, "x4");
+```
+
+---
+
+### Stream 输出层
+
+`LogWriter.FlushTo(Stream)` 新增重载（[Writer/LogWriter.cs:123](src/Lunarium.Logger/Writer/LogWriter.cs#L123)），直接将 `BufferWriter` 的已写字节写入 `Stream`，零拷贝零分配。
+
+```csharp
+internal void FlushTo(Stream stream) => _bufferWriter.FlushTo(stream);
+```
+
+保留原 `FlushTo(TextWriter)` 作为降级路径（[Writer/LogWriter.cs:134](src/Lunarium.Logger/Writer/LogWriter.cs#L134)）：
+
+```csharp
+internal void FlushTo(TextWriter output)
+{
+    ReadOnlySpan<byte> bytes = _bufferWriter.WrittenSpan;
+    if (bytes.IsEmpty) return;
+    int charCount = Encoding.UTF8.GetCharCount(bytes);
+    if (charCount <= 4096)  // 小内容 stackalloc，零堆分配
+    {
+        Span<char> chars = stackalloc char[charCount];
+        Encoding.UTF8.GetChars(bytes, chars);
+        output.Write(chars);
+    }
+    else  // 大内容退化一次 string 分配
+    {
+        output.Write(Encoding.UTF8.GetString(bytes));
+    }
+}
+```
+
+#### ConsoleTarget 改造
+
+[Target/ConsoleTarget.cs](src/Lunarium.Logger/Target/ConsoleTarget.cs) 构造时缓存 `Console.OpenStandardOutput()` / `Console.OpenStandardError()` 流：
+
+```csharp
+private readonly Stream _stdout;
+private readonly Stream _stderr;
+
+public ConsoleTarget()
+{
+    _stdout = Console.OpenStandardOutput();
+    _stderr = Console.OpenStandardError();
+}
+```
+
+`Emit` 调用 `logWriter.FlushTo(stream)` 直接写入字节流，`Dispose` 释放两个 Stream。
+
+#### FileTarget 改造
+
+[Target/FileTarget.cs](src/Lunarium.Logger/Target/FileTarget.cs) 的 `StreamWriter? _writer` 改为 `FileStream? _fileStream`，消除中间缓冲层：
+
+```csharp
+private FileStream? _fileStream;
+
+private void OpenFile(DateTimeOffset timestamp)
+{
+    // 旧：new StreamWriter(fs, Encoding.UTF8, bufferSize: 2048)
+    // 新：直接 FileStream
+    _fileStream = new FileStream(
+        currentFilePath,
+        FileMode.Append,
+        FileAccess.Write,
+        FileShare.Read | FileShare.Delete,
+        bufferSize: 4096,  // Writer 缓冲大小
+        FileOptions.None);
+}
+```
+
+`_writer.Flush()` 改为 `_fileStream.Flush()`，所有引用更新为 `_fileStream`。
+
+---
+
+### ByteChannelTarget 字节流 Channel
+
+[Target/ChannelTarget.cs](src/Lunarium.Logger/Target/ChannelTarget.cs) 新增 `ByteChannelTarget`（[ChannelTarget.cs:93](src/Lunarium.Logger/Target/ChannelTarget.cs#L93)），将日志格式化为 UTF-8 字节数组写入 Channel：
+
+```csharp
+public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
+{
+    public bool ToJson { get; set; } = false;
+
+    protected override byte[] Transform(LogEntry entry)
+    {
+        LogWriter logWriter = ToJson
+            ? WriterPool.Get<LogJsonWriter>()
+            : _isColor ? WriterPool.Get<LogColorTextWriter>() : WriterPool.Get<LogTextWriter>();
+        try
+        {
+            logWriter.Render(entry);
+            return logWriter.GetWrittenBytes();  // byte[] 分配（ToArray()），但跳过 UTF-8→string 解码
+        }
+        finally
+        {
+            logWriter.Return();
+        }
+    }
+}
+```
+
+`LogWriter.GetWrittenBytes()` 新增方法（[Writer/LogWriter.cs:143](src/Lunarium.Logger/Writer/LogWriter.cs#L143)），返回 `BufferWriter.WrittenSpan.ToArray()`。
+
+**性能对比**：
+
+| Target | 编码步骤 | 堆分配 |
+|--------|----------|--------|
+| `StringChannelTarget` | UTF-8 字节 → string 解码（`ToString()`） | UTF-8 字节 + UTF-16 字符串 |
+| `ByteChannelTarget` | UTF-8 字节 → byte[] 拷贝（`ToArray()`） | UTF-8 字节数组 |
+| `LogEntryChannelTarget` | 无编码 | 无 |
+
+`ByteChannelTarget` 适合消费者直接写网络/文件（例如 `HttpClient.SendAsync(bytes)`），`LogEntryChannelTarget` 适合消费者需要完整对象（例如自定义处理逻辑）。
+
+**StringChannelTarget 性能警告**：
+
+`StringChannelTarget` 的 XML 文档已标注性能提示：每次 Emit 必然产生一次 string 堆分配（`Encoding.UTF8.GetString`）。若消费者直接写网络/文件，建议改用 `ByteChannelTarget`。
+
+---
+
 ## 公开 API 边界与扩展点
 
 ### API 层次

@@ -46,6 +46,8 @@ public abstract class ChannelTarget<T> : ILogTarget, IDisposable
 
 /// <summary>
 /// 将 LogEntry 格式化为字符串写入 Channel。
+/// ⚠️ 性能提示：每次 Emit 会产生一次 string 堆分配（UTF-8 解码为 UTF-16）。
+/// 若消费者直接写网络/文件，建议改用 <see cref="ByteChannelTarget"/>。
 /// </summary>
 public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
 {
@@ -76,6 +78,42 @@ public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
         {
             logWriter.Render(entry);
             return logWriter.ToString();
+        }
+        finally
+        {
+            logWriter.Return();
+        }
+    }
+}
+
+/// <summary>
+/// 将 LogEntry 格式化为 UTF-8 字节数组写入 Channel。
+/// 相比 <see cref="StringChannelTarget"/>，跳过 UTF-8→string 解码步骤，
+/// 适合消费者直接进行网络传输或文件写入的场景。
+/// ⚠️ 性能提示：每次 Emit 仍会产生一次 byte[] 堆分配（ToArray()）。
+/// </summary>
+public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
+{
+    private readonly bool _isColor;
+    public bool ToJson { get; set; } = false;
+
+    public ByteChannelTarget(ChannelWriter<byte[]> writer, bool isColor)
+        : base(writer)
+    {
+        _isColor = isColor;
+    }
+
+    protected override byte[] Transform(LogEntry entry)
+    {
+        LogWriter logWriter = ToJson
+            ? WriterPool.Get<LogJsonWriter>()
+            : _isColor
+                ? WriterPool.Get<LogColorTextWriter>()
+                : WriterPool.Get<LogTextWriter>();
+        try
+        {
+            logWriter.Render(entry);
+            return logWriter.GetWrittenBytes();
         }
         finally
         {

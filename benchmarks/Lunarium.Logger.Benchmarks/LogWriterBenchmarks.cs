@@ -72,7 +72,7 @@ public class LogWriterBenchmarks
     public void Text_PlainText()
     {
         var w = WriterPool.Get<LogTextWriter>();
-        try { w.Render(_entryPlainText); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entryPlainText); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -80,7 +80,7 @@ public class LogWriterBenchmarks
     public void Text_SingleProperty()
     {
         var w = WriterPool.Get<LogTextWriter>();
-        try { w.Render(_entrySingleProp); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entrySingleProp); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -88,7 +88,7 @@ public class LogWriterBenchmarks
     public void Text_MultiProperty()
     {
         var w = WriterPool.Get<LogTextWriter>();
-        try { w.Render(_entryMultiProp); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entryMultiProp); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -96,7 +96,7 @@ public class LogWriterBenchmarks
     public void Text_AlignmentAndFormat()
     {
         var w = WriterPool.Get<LogTextWriter>();
-        try { w.Render(_entryWithFormatAlign); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entryWithFormatAlign); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -106,7 +106,7 @@ public class LogWriterBenchmarks
     public void Color_SingleProperty()
     {
         var w = WriterPool.Get<LogColorTextWriter>();
-        try { w.Render(_entrySingleProp); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entrySingleProp); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -114,7 +114,7 @@ public class LogWriterBenchmarks
     public void Color_MultiProperty()
     {
         var w = WriterPool.Get<LogColorTextWriter>();
-        try { w.Render(_entryMultiProp); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entryMultiProp); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -124,7 +124,7 @@ public class LogWriterBenchmarks
     public void Json_SingleProperty()
     {
         var w = WriterPool.Get<LogJsonWriter>();
-        try { w.Render(_entrySingleProp); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entrySingleProp); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 
@@ -132,7 +132,7 @@ public class LogWriterBenchmarks
     public void Json_MultiProperty()
     {
         var w = WriterPool.Get<LogJsonWriter>();
-        try { w.Render(_entryMultiProp); w.FlushTo(TextWriter.Null); }
+        try { w.Render(_entryMultiProp); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 

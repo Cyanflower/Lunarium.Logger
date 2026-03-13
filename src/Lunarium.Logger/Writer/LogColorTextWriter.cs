@@ -56,24 +56,25 @@ internal sealed class LogColorTextWriter : LogWriter
     // =============== 公共 API ===============
     protected override LogColorTextWriter WriteTimestamp(DateTimeOffset timestamp)
     {
-        _stringBuilder.Append(prefix);
+        _bufferWriter.Append(prefix);
         SetColor(TimestampColor);
         switch (TimestampFormatConfig.TextMode)
         {
             case TextTimestampMode.Unix:
-                _stringBuilder.Append($"{timestamp.ToUnixTimeSeconds()}");
+                _bufferWriter.AppendFormattable(timestamp.ToUnixTimeSeconds());
                 break;
             case TextTimestampMode.UnixMs:
-                _stringBuilder.Append($"{timestamp.ToUnixTimeMilliseconds()}");
+                _bufferWriter.AppendFormattable(timestamp.ToUnixTimeMilliseconds());
                 break;
             case TextTimestampMode.ISO8601:
-                _stringBuilder.Append($"{timestamp:O}");
+                _bufferWriter.AppendFormattable(timestamp, "O");
                 break;
             case TextTimestampMode.Custom:
-                _stringBuilder.AppendFormat($"{{0:{TimestampFormatConfig.TextCustomFormat}}}", timestamp);
+                _bufferWriter.AppendFormattable(timestamp, TimestampFormatConfig.TextCustomFormat.AsSpan());
                 break;
         }
-        _stringBuilder.Append($"{suffix} ");
+        _bufferWriter.Append(suffix);
+        _bufferWriter.Append(' ');
         return this;
     }
 
@@ -97,9 +98,12 @@ internal sealed class LogColorTextWriter : LogWriter
             LogLevel.Critical => () => SetColor(ConsoleColor.White, LevelCriticalBgColor),
             _ => () => SetColor(ConsoleColor.White, ConsoleColor.Yellow)
         };
-        _stringBuilder.Append($"{prefix}");
+        _bufferWriter.Append(prefix);
         levelColor.Invoke();
-        _stringBuilder.Append($"{levelStr}{AnsiReset}{suffix} ");
+        _bufferWriter.Append(levelStr);
+        _bufferWriter.Append(AnsiReset);
+        _bufferWriter.Append(suffix);
+        _bufferWriter.Append(' ');
         return this;
     }
 
@@ -107,9 +111,11 @@ internal sealed class LogColorTextWriter : LogWriter
     {
         if (!string.IsNullOrEmpty(context))
         {
-            _stringBuilder.Append(prefix);
+            _bufferWriter.Append(prefix);
             SetColor(ContextColor);
-            _stringBuilder.Append($"{context}{suffix} ");
+            _bufferWriter.Append(context);
+            _bufferWriter.Append(suffix);
+            _bufferWriter.Append(' ');
         }
         return this;
     }
@@ -122,12 +128,12 @@ internal sealed class LogColorTextWriter : LogWriter
             switch (token)
             {
                 case TextToken textToken:
-                    _stringBuilder.Append(textToken.Text);
+                    _bufferWriter.Append(textToken.Text);
                     break;
                 case PropertyToken propertyToken:
                     if (propertys.Length == 0)
                     {
-                        _stringBuilder.Append(propertyToken.RawText.Text);
+                        _bufferWriter.Append(propertyToken.RawText.Text);
                     }
                     else
                     {
@@ -144,10 +150,10 @@ internal sealed class LogColorTextWriter : LogWriter
     {
         if (exception != null)
         {
-            _stringBuilder.AppendLine();
+            _bufferWriter.AppendLine();
             SetColor(ConsoleColor.Red);
-            _stringBuilder.Append(exception);
-            _stringBuilder.Append(AnsiReset);
+            _bufferWriter.Append(exception);
+            _bufferWriter.Append(AnsiReset);
         }
         return this;
     }
@@ -170,37 +176,37 @@ internal sealed class LogColorTextWriter : LogWriter
             if (!found)
             {
                 // 如果找不到对应的参数，输出原始文本
-                _stringBuilder.Append(propertyToken.RawText.Text);
+                _bufferWriter.Append(propertyToken.RawText.Text);
                 return;
             }
 
             if (value is null)
             {
                 SetValueColor(value);
-                _stringBuilder.Append("null");
-                _stringBuilder.Append(AnsiReset);
+                _bufferWriter.Append("null");
+                _bufferWriter.Append(AnsiReset);
                 return;
             }
-            
+
             // 当具有解构标识或设置了默认解构(且是集合类型)时, 尝试解构对象且跳过对齐和格式化(对json格式无意义)
             if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
             {
                 SetValueColor(value);
                 // 当遇到 {@...} 时，使用 JsonSerializer 把它变成一个易读的 JSON 字符串
-                _stringBuilder.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
-                _stringBuilder.Append(AnsiReset);
+                _bufferWriter.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
+                _bufferWriter.Append(AnsiReset);
                 return; // 处理完就返回, 跳过构建格式字符串
             }
-            
+
             // 构建格式字符串，支持对齐和格式化
             string formatString = BuildFormatString(propertyToken.Alignment, propertyToken.Format);
             SetValueColor(value);
-            _stringBuilder.AppendFormat(formatString, value);
-            _stringBuilder.Append(AnsiReset);
+            _bufferWriter.AppendFormat(formatString, value);
+            _bufferWriter.Append(AnsiReset);
         }
         catch (Exception ex)
         {
-            _stringBuilder.Append(propertyToken.RawText.Text);
+            _bufferWriter.Append(propertyToken.RawText.Text);
             InternalLogger.Error(ex, $"LogWriter WriteValue Failed: {propertyToken.RawText.Text}");
         }
     }
@@ -225,24 +231,24 @@ internal sealed class LogColorTextWriter : LogWriter
         if (format is not null && format.Length > 96) return BuildFormatStringByHeap(alignment, format);
         Span<char> buffer = stackalloc char[128];
         int pos = 0;
-        
+
         buffer[pos++] = '{';
         buffer[pos++] = '0';
-        
+
         if (alignment.HasValue)
         {
             buffer[pos++] = ',';
             alignment.Value.TryFormat(buffer[pos..], out int written);
             pos += written;
         }
-        
+
         if (!string.IsNullOrEmpty(format))
         {
             buffer[pos++] = ':';
             format.AsSpan().CopyTo(buffer[pos..]);
             pos += format.Length;
         }
-        
+
         buffer[pos++] = '}';
         return new string(buffer[..pos]);
     }
@@ -279,13 +285,19 @@ internal sealed class LogColorTextWriter : LogWriter
     private void SetColor(ConsoleColor color)
     {
         // 格式: [颜色指令]文本[重置指令]
-        _stringBuilder.Append($"{AnsiPrefix}{ForegroundCode(color)}m");
+        _bufferWriter.Append(AnsiPrefix);
+        _bufferWriter.Append(ForegroundCode(color));
+        _bufferWriter.Append('m');
     }
 
     private void SetColor(ConsoleColor foreground, ConsoleColor background)
     {
         // ANSI标准允许用分号组合多个代码
-        _stringBuilder.Append($"{AnsiPrefix}{ForegroundCode(foreground)};{BackgroundCode(background)}m");
+        _bufferWriter.Append(AnsiPrefix);
+        _bufferWriter.Append(ForegroundCode(foreground));
+        _bufferWriter.Append(';');
+        _bufferWriter.Append(BackgroundCode(background));
+        _bufferWriter.Append('m');
     }
 
     /// <summary>

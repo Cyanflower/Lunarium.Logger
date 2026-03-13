@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-using System.Globalization;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger.Writer;
@@ -27,7 +26,7 @@ internal sealed class LogJsonWriter : LogWriter
     // 重写 BeginEntry 输出 JSON 开始符号
     protected override LogWriter BeginEntry()
     {
-        _stringBuilder.Append('{');
+        _bufferWriter.Append('{');
         return this;
     }
 
@@ -46,7 +45,7 @@ internal sealed class LogJsonWriter : LogWriter
     // 重写 EndEntry 输出 JSON 结束符号
     protected override LogWriter EndEntry()
     {
-        _stringBuilder.Append('}');
+        _bufferWriter.Append('}');
         return this;
     }
 
@@ -55,20 +54,24 @@ internal sealed class LogJsonWriter : LogWriter
         switch (TimestampFormatConfig.JsonMode)
         {
             case JsonTimestampMode.Unix:
-                _stringBuilder.Append($"\"Timestamp\":{timestamp.ToUnixTimeSeconds()},");
+                _bufferWriter.Append("\"Timestamp\":");
+                _bufferWriter.AppendFormattable(timestamp.ToUnixTimeSeconds());
+                _bufferWriter.Append(',');
                 break;
             case JsonTimestampMode.UnixMs:
-                _stringBuilder.Append($"\"Timestamp\":{timestamp.ToUnixTimeMilliseconds()},");
+                _bufferWriter.Append("\"Timestamp\":");
+                _bufferWriter.AppendFormattable(timestamp.ToUnixTimeMilliseconds());
+                _bufferWriter.Append(',');
                 break;
             case JsonTimestampMode.ISO8601:
-                _stringBuilder.Append("\"Timestamp\":");
+                _bufferWriter.Append("\"Timestamp\":");
                 AppendJsonString(timestamp.ToString("O"));
-                _stringBuilder.Append(',');
+                _bufferWriter.Append(',');
                 break;
             case JsonTimestampMode.Custom:
-                _stringBuilder.Append("\"Timestamp\":");
+                _bufferWriter.Append("\"Timestamp\":");
                 AppendJsonString(timestamp.ToString(TimestampFormatConfig.JsonCustomFormat));
-                _stringBuilder.Append(',');
+                _bufferWriter.Append(',');
                 break;
         }
         return this;
@@ -85,8 +88,11 @@ internal sealed class LogJsonWriter : LogWriter
             LogLevel.Critical => "Critical",
             _ => "Unknown"
         };
-        _stringBuilder.Append($"\"Level\":\"{levelStr}\",");
-        _stringBuilder.Append($"\"LogLevel\":{(int)level},");
+        _bufferWriter.Append("\"Level\":\"");
+        _bufferWriter.Append(levelStr);
+        _bufferWriter.Append("\",\"LogLevel\":");
+        _bufferWriter.AppendFormattable((int)level);
+        _bufferWriter.Append(',');
         return this;
     }
 
@@ -94,16 +100,16 @@ internal sealed class LogJsonWriter : LogWriter
     {
         if (!string.IsNullOrEmpty(context))
         {
-            _stringBuilder.Append("\"Context\":");
+            _bufferWriter.Append("\"Context\":");
             AppendJsonString(context);
-            _stringBuilder.Append(',');
+            _bufferWriter.Append(',');
         }
         return this;
     }
 
     private LogJsonWriter WriteOriginalMessage(IReadOnlyList<MessageTemplateTokens> tokens)
     {
-        _stringBuilder.Append("\"OriginalMessage\":\"");
+        _bufferWriter.Append("\"OriginalMessage\":\"");
         foreach (var token in tokens)
         {
             switch (token)
@@ -116,14 +122,14 @@ internal sealed class LogJsonWriter : LogWriter
                     break;
             }
         }
-        _stringBuilder.Append("\",");
+        _bufferWriter.Append("\",");
 
         return this;
     }
 
     protected override LogJsonWriter WriteRenderedMessage(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys)
     {
-        _stringBuilder.Append("\"RenderedMessage\":\"");
+        _bufferWriter.Append("\"RenderedMessage\":\"");
         int i = 0;
         foreach (var token in tokens)
         {
@@ -145,13 +151,13 @@ internal sealed class LogJsonWriter : LogWriter
                     break;
             }
         }
-        _stringBuilder.Append("\",");
+        _bufferWriter.Append("\",");
         return this;
     }
 
     private LogJsonWriter WritePropertyValue(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys)
     {
-        _stringBuilder.Append("\"Propertys\":{");
+        _bufferWriter.Append("\"Propertys\":{");
         if (propertys.Length != 0)
         {
             int iteration = 0;
@@ -159,13 +165,13 @@ internal sealed class LogJsonWriter : LogWriter
             {
                 if (token is PropertyToken propertyToken)
                 {
-                    _stringBuilder.Append('"');
+                    _bufferWriter.Append('"');
                     AppendJsonStringContent(propertyToken.PropertyName);
-                    _stringBuilder.Append("\":");
+                    _bufferWriter.Append("\":");
 
                     if (iteration >= propertys.Length)
                     {
-                        _stringBuilder.Append("null,");
+                        _bufferWriter.Append("null,");
                         continue;
                     }
                     object? value = propertys[iteration];
@@ -175,7 +181,7 @@ internal sealed class LogJsonWriter : LogWriter
                     {
                         var valueJson = TrySerializeToJson(value);
                         if (valueJson != null)
-                            _stringBuilder.Append(valueJson);
+                            _bufferWriter.Append(valueJson);
                         else
                             ToJsonValue(value);
                     }
@@ -184,19 +190,19 @@ internal sealed class LogJsonWriter : LogWriter
                         ToJsonValue(value);
                     }
 
-                    _stringBuilder.Append(',');
+                    _bufferWriter.Append(',');
                     iteration++;
                 }
             }
 
             // 移除末尾多余的逗号
-            if (_stringBuilder.Length > 0 && _stringBuilder[_stringBuilder.Length - 1] == ',')
+            if (_bufferWriter.Length > 0 && _bufferWriter[_bufferWriter.Length - 1] == ',')
             {
-                _stringBuilder.Remove(_stringBuilder.Length - 1, 1);
+                _bufferWriter.RemoveLast();
             }
         }
 
-        _stringBuilder.Append("},");
+        _bufferWriter.Append("},");
         return this;
     }
 
@@ -204,15 +210,15 @@ internal sealed class LogJsonWriter : LogWriter
     {
         if (exception != null)
         {
-            _stringBuilder.Append("\"Exception\":");
+            _bufferWriter.Append("\"Exception\":");
             AppendJsonString(exception.ToString());
         }
         else
         {
             // 移除末尾多余的逗号
-            if (_stringBuilder.Length > 0 && _stringBuilder[_stringBuilder.Length - 1] == ',')
+            if (_bufferWriter.Length > 0 && _bufferWriter[_bufferWriter.Length - 1] == ',')
             {
-                _stringBuilder.Remove(_stringBuilder.Length - 1, 1);
+                _bufferWriter.RemoveLast();
             }
         }
         return this;
@@ -225,15 +231,15 @@ internal sealed class LogJsonWriter : LogWriter
     // ================ 辅助方法 ================
 
     /// <summary>
-    /// 将字符串转义并添加 JSON 引号输出到 StringBuilder
+    /// 将字符串转义并添加 JSON 引号输出到缓冲区
     /// 例如：Hello "World" → "Hello \"World\""
     /// </summary>
     /// <param name="value">要转义的字符串</param>
     private void AppendJsonString(string value)
     {
-        _stringBuilder.Append('"');
+        _bufferWriter.Append('"');
         AppendJsonStringContent(value);
-        _stringBuilder.Append('"');
+        _bufferWriter.Append('"');
     }
 
     /// <summary>
@@ -258,8 +264,8 @@ internal sealed class LogJsonWriter : LogWriter
                 if (char.IsLowSurrogate(low))
                 {
                     // 保持代理对完整，直接输出（JSON 标准支持）
-                    _stringBuilder.Append(c);
-                    _stringBuilder.Append(low);
+                    _bufferWriter.Append(c);
+                    _bufferWriter.Append(low);
                     i++; // 跳过低代理
                     continue;
                 }
@@ -269,33 +275,33 @@ internal sealed class LogJsonWriter : LogWriter
             switch (c)
             {
                 case '"':  // 双引号 - 必须转义，否则会破坏 JSON 结构
-                    _stringBuilder.Append("\\\"");
+                    _bufferWriter.Append("\\\"");
                     break;
                 case '\\': // 反斜杠 - 必须转义，否则会与转义序列冲突
-                    _stringBuilder.Append("\\\\");
+                    _bufferWriter.Append("\\\\");
                     break;
                 case '\n': // 换行符 - 必须转义，JSON 字符串不能包含实际换行
-                    _stringBuilder.Append("\\n");
+                    _bufferWriter.Append("\\n");
                     break;
                 case '\r': // 回车符 - 必须转义
-                    _stringBuilder.Append("\\r");
+                    _bufferWriter.Append("\\r");
                     break;
                 case '\t': // 制表符 - 必须转义
-                    _stringBuilder.Append("\\t");
+                    _bufferWriter.Append("\\t");
                     break;
                 case '\b': // 退格符 - 必须转义
-                    _stringBuilder.Append("\\b");
+                    _bufferWriter.Append("\\b");
                     break;
                 case '\f': // 换页符 - 必须转义
-                    _stringBuilder.Append("\\f");
+                    _bufferWriter.Append("\\f");
                     break;
                 default:
                     // 控制字符（0x00-0x1F）必须转义为 \uXXXX 格式
                     // 这些字符在 JSON 字符串中不可见且可能导致解析问题
                     if (c < 0x20)
                     {
-                        _stringBuilder.Append("\\u");
-                        _stringBuilder.Append(((int)c).ToString("x4"));
+                        _bufferWriter.Append("\\u");
+                        _bufferWriter.AppendFormattable((int)c, "x4");
                     }
                     else
                     {
@@ -306,7 +312,7 @@ internal sealed class LogJsonWriter : LogWriter
                         // 2. 性能更好（无需转义处理）
                         // 3. 直接可读（便于调试和查看日志文件）
                         // 4. 所有主流日志分析工具都完美支持 UTF-8
-                        _stringBuilder.Append(c);
+                        _bufferWriter.Append(c);
                     }
                     break;
             }
@@ -329,7 +335,7 @@ internal sealed class LogJsonWriter : LogWriter
 
             if (propertys[i] is null)
             {
-                _stringBuilder.Append("null");
+                _bufferWriter.Append("null");
                 return;
             }
 
@@ -353,71 +359,70 @@ internal sealed class LogJsonWriter : LogWriter
     {
         if (value == null)
         {
-            _stringBuilder.Append("null");
+            _bufferWriter.Append("null");
             return;
         }
 
         switch (value)
         {
             // ===== 数值类型 (Numbers) =====
-            // 数值类型在 JSON 中不需要引号，直接输出
-            // 使用 InvariantCulture 确保数值格式不受系统区域设置影响（避免逗号分隔符问题）
+            // 数值类型在 JSON 中不需要引号，直接格式化为 UTF-8，不经过 string 分配
             case int i:
-                _stringBuilder.Append(i.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable(i);
                 break;
             case long l:
-                _stringBuilder.Append(l.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable(l);
                 break;
             case short s:
-                _stringBuilder.Append(s.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable((int)s);
                 break;
             case byte b:
-                _stringBuilder.Append(b.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable((uint)b);
                 break;
             case uint ui:
-                _stringBuilder.Append(ui.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable(ui);
                 break;
             case ulong ul:
-                _stringBuilder.Append(ul.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable(ul);
                 break;
             case ushort us:
-                _stringBuilder.Append(us.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable((uint)us);
                 break;
             case sbyte sb:
-                _stringBuilder.Append(sb.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable((int)sb);
                 break;
             case decimal dec:
-                _stringBuilder.Append(dec.ToString(CultureInfo.InvariantCulture));
+                _bufferWriter.AppendFormattable(dec);
                 break;
 
             // 浮点数需要特殊处理 NaN 和 Infinity
             // JSON 标准不支持 NaN 和 Infinity，需要转为字符串
             case double d:
                 if (double.IsNaN(d))
-                    _stringBuilder.Append("\"NaN\"");
+                    _bufferWriter.Append("\"NaN\"");
                 else if (double.IsPositiveInfinity(d))
-                    _stringBuilder.Append("\"Infinity\"");
+                    _bufferWriter.Append("\"Infinity\"");
                 else if (double.IsNegativeInfinity(d))
-                    _stringBuilder.Append("\"-Infinity\"");
+                    _bufferWriter.Append("\"-Infinity\"");
                 else
                     // "R" 格式确保往返转换精度（Round-trip）
-                    _stringBuilder.Append(d.ToString("R", CultureInfo.InvariantCulture));
+                    _bufferWriter.AppendFormattable(d, "R");
                 break;
             case float f:
                 if (float.IsNaN(f))
-                    _stringBuilder.Append("\"NaN\"");
+                    _bufferWriter.Append("\"NaN\"");
                 else if (float.IsPositiveInfinity(f))
-                    _stringBuilder.Append("\"Infinity\"");
+                    _bufferWriter.Append("\"Infinity\"");
                 else if (float.IsNegativeInfinity(f))
-                    _stringBuilder.Append("\"-Infinity\"");
+                    _bufferWriter.Append("\"-Infinity\"");
                 else
-                    _stringBuilder.Append(f.ToString("R", CultureInfo.InvariantCulture));
+                    _bufferWriter.AppendFormattable(f, "R");
                 break;
 
             // ===== 布尔类型 (Boolean) =====
             // JSON 布尔值是小写的 true/false（不带引号）
             case bool b:
-                _stringBuilder.Append(b ? "true" : "false");
+                _bufferWriter.Append(b ? "true" : "false");
                 break;
 
             // ===== 字符串类型 =====
@@ -432,15 +437,21 @@ internal sealed class LogJsonWriter : LogWriter
             // ===== 日期时间类型 =====
             // 使用 ISO 8601 格式（"O"）以确保跨平台兼容性和精度
             case DateTime dt:
-                AppendJsonString(dt.ToString("O"));
+                _bufferWriter.Append('"');
+                _bufferWriter.AppendFormattable(dt, "O");
+                _bufferWriter.Append('"');
                 break;
             case DateTimeOffset dto:
-                AppendJsonString(dto.ToString("O"));
+                _bufferWriter.Append('"');
+                _bufferWriter.AppendFormattable(dto, "O");
+                _bufferWriter.Append('"');
                 break;
 
             // ===== 其他常见类型 =====
             case Guid g:
-                AppendJsonString(g.ToString());
+                _bufferWriter.Append('"');
+                _bufferWriter.AppendFormattable(g);
+                _bufferWriter.Append('"');
                 break;
             case TimeSpan ts:
                 AppendJsonString(ts.ToString());

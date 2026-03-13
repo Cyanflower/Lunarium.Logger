@@ -45,7 +45,7 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 
 - **目标类**: `LogTextWriter`、`LogColorTextWriter`、`LogJsonWriter`（均为 `Lunarium.Logger.Writer`，internal）、`WriterPool`（internal static）
 - **测量目标**: `LogWriter.Render(LogEntry)` 渲染管线吞吐量 + `WriterPool` 对象池收益
-- **架构背景**: 三种 Writer 均通过 `WriterPool.Get<T>()` 取出、`writer.Return()` 归还；内部使用 `StringBuilder` 构建输出，写入 `TextWriter.Null` 排除 I/O 干扰。`GlobalSetup` 中预构建含解析完毕模板的 `LogEntry`，排除解析器开销干扰。
+- **架构背景**: 三种 Writer 均通过 `WriterPool.Get<T>()` 取出、`writer.Return()` 归还；内部使用 `BufferWriter`（基于 `ArrayPool<byte>`）构建 UTF-8 输出，写入 `Stream.Null` 排除 I/O 干扰。`GlobalSetup` 中预构建含解析完毕模板的 `LogEntry`，排除解析器开销干扰。
 - **主要 Benchmark 场景**:
 
   **LogTextWriter（纯文本格式）**
