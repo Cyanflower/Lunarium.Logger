@@ -45,14 +45,15 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 
 - **目标类**: `LogTextWriter`、`LogColorTextWriter`、`LogJsonWriter`（均为 `Lunarium.Logger.Writer`，internal）、`WriterPool`（internal static）
 - **测量目标**: `LogWriter.Render(LogEntry)` 渲染管线吞吐量 + `WriterPool` 对象池收益
-- **架构背景**: 三种 Writer 均通过 `WriterPool.Get<T>()` 取出、`writer.Return()` 归还；内部使用 `BufferWriter`（基于 `ArrayPool<byte>`）构建 UTF-8 输出，写入 `Stream.Null` 排除 I/O 干扰。`GlobalSetup` 中预构建含解析完毕模板的 `LogEntry`，排除解析器开销干扰。
+- **架构背景**: 三种 Writer 均通过 `WriterPool.Get<T>()` 取出、`writer.Return()` 归还；内部使用 `BufferWriter`（自定义 `IBufferWriter<byte>` 实现）构建 UTF-8 输出，写入 `Stream.Null` 排除 I/O 干扰。`GlobalSetup` 中预构建含解析完毕模板的 `LogEntry`，排除解析器开销干扰。
 - **主要 Benchmark 场景**:
 
   **LogTextWriter（纯文本格式）**
   - `Text_PlainText`（基准线）：无属性消息渲染，代表最小开销路径。
   - `Text_SingleProperty`：单属性渲染，测量 `AppendFormat` 与属性值查找的基础开销。
   - `Text_MultiProperty`：四属性渲染，观察属性数量线性增长对渲染时间的影响。
-  - `Text_AlignmentAndFormat`：含对齐 `{Count,8:D}` 与格式化 `{Percent:P1}`，验证 `BuildFormatString` 的 `stackalloc` 路径开销。
+  - `Text_AlignmentAndFormat`：含对齐 `{Count,8:D}` 与格式化 `{Percent:P1}`，验证 `IUtf8SpanFormattable` 快路径 + 手动对齐实现的开销。
+  - `Text_Numeric`：数值/时间类型（`int`、`DateTimeOffset`、`TimeSpan`）的 `IUtf8SpanFormattable` 零分配路径验证。
 
   **LogColorTextWriter（带 ANSI 颜色的文本格式）**
   - `Color_SingleProperty`：单属性渲染，相比 `Text_SingleProperty` 测量 ANSI 转义码插入的额外开销。
@@ -61,6 +62,8 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
   **LogJsonWriter（JSON 格式）**
   - `Json_SingleProperty`：单属性 JSON 渲染，基于 `Utf8JsonWriter` 测量核心序列化开销。
   - `Json_MultiProperty`：四属性 JSON 渲染，验证 `Utf8JsonWriter` 的多属性拼接效率。
+  - `Json_Numeric`：数值/时间类型的 `Utf8JsonWriter` 直接写入路径（`WriteNumberValue` / `WriteStringValue(Span<byte>)`）验证。
+  - `Json_ComplexObject`：复杂对象解构（`{@Payload}`）测试，验证 `IDestructurable` 接口与 `Utf8JsonWriter.WriteRawValue()` 集成路径。
 
   **WriterPool 对象池收益**
   - `Pool_GetAndReturn`：`WriterPool.Get<LogTextWriter>()` + `WriterPool.Return()` 的往返开销（池化路径），测量 `ConcurrentBag.TryTake` 与 `Add` 的代价。
@@ -80,26 +83,10 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
   - `WithIncludes_Pass_CacheHit`：配置 5 条 Include 前缀规则，context 匹配通过的缓存命中开销。
   - `WithIncludes_Reject_CacheHit`：context 不匹配 Include 列表被拒绝，缓存命中路径（命中结果为 false）。
   - `WithExcludes_Pass_CacheHit`：配置 3 条 Exclude 前缀规则，context 不在排除列表通过的缓存命中。
-  - `WithExcludes_Reject_CacheHit`：context 命中 Exclude 列表被拒绝，缓存命中路径。
+  - `WithExcludes_Reject_CacheHit`：context 匹配 Exclude 列表被拒绝，缓存命中路径。
 
   **缓存未命中（近似）**
   - `NoRules_CacheMiss_Approx`：使用 3000 个预生成唯一 context 字符串池（超出缓存上限 2048 后触发清空），近似模拟缓存未命中场景，测量前缀匹配计算 + 字典写入开销。`LogEntry` 已在 `static` 构造器中预生成，排除构造开销干扰。
-
----
-
-## ConfigPerformanceBenchmarks.cs
-
-- **目标类**: `SafetyClearConfig`, `AtomicOpsConfig`, `BufferWriter`, `WriterPool`
-- **测量目标**: 配置项对性能的影响
-- **架构背景**: `SafetyClear` 影响 Reset/Dispose 时的 `Array.Clear` 调用；`BufferWriterInterlocked` 影响 Dispose 时的 `Interlocked.Exchange` 调用。由于这些是静态全局配置，Benchmark 之间共享配置状态。
-- **主要 Benchmark 场景**:
-  - `FullPipeline_Default`（基准线）：完整渲染管道，使用默认配置。
-  - `Reset_IndexOnly`：仅重置索引，模拟 `SafetyClear=false`。
-  - `Reset_WithArrayClear`：含 `Array.Clear` 调用，模拟 `SafetyClear=true` 的开销。
-  - `Dispose_WithoutInterlocked`：直接 Dispose，模拟 `BufferWriterInterlocked=false`。
-  - `Dispose_WithInterlocked`：含 `Interlocked.Exchange`，模拟 `BufferWriterInterlocked=true`（双重保险）。
-  - `Pool_GetAndReturn`：池化周期（Get + Return），对比无池化场景。
-  - `Alloc_NewAndDispose`：无池化（new + Dispose），量化池化收益。
 
 ---
 
