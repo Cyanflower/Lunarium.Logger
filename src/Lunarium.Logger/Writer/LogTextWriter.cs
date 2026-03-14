@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System.Text;
+using System.Globalization;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger.Writer;
@@ -26,7 +27,7 @@ internal sealed class LogTextWriter : LogWriter
     // =============== 公共 API ===============
     protected override LogTextWriter WriteTimestamp(DateTimeOffset timestamp)
     {
-        _bufferWriter.Append('[');
+        _bufferWriter.Append("["u8);
         switch (TimestampFormatConfig.TextMode)
         {
             case TextTimestampMode.Unix:
@@ -42,7 +43,7 @@ internal sealed class LogTextWriter : LogWriter
                 _bufferWriter.AppendFormattable(timestamp, TimestampFormatConfig.TextCustomFormat.AsSpan());
                 break;
         }
-        _bufferWriter.Append("] ");
+        _bufferWriter.Append("] "u8);
         return this;
     }
 
@@ -50,26 +51,26 @@ internal sealed class LogTextWriter : LogWriter
     {
         var levelStr = level switch
         {
-            LogLevel.Debug => "DBG",
-            LogLevel.Info => "INF",
-            LogLevel.Warning => "WRN",
-            LogLevel.Error => "ERR",
-            LogLevel.Critical => "CRT",
-            _ => "UNK"
+            LogLevel.Debug => "DBG"u8,
+            LogLevel.Info => "INF"u8,
+            LogLevel.Warning => "WRN"u8,
+            LogLevel.Error => "ERR"u8,
+            LogLevel.Critical => "CRT"u8,
+            _ => "UNK"u8
         };
-        _bufferWriter.Append('[');
+        _bufferWriter.Append("["u8);
         _bufferWriter.Append(levelStr);
-        _bufferWriter.Append("] ");
+        _bufferWriter.Append("] "u8);
         return this;
     }
 
-    protected override LogTextWriter WriteContext(string? context)
+    protected override LogTextWriter WriteContext(ReadOnlyMemory<byte> context)
     {
-        if (!string.IsNullOrEmpty(context))
+        if (!context.IsEmpty)
         {
-            _bufferWriter.Append('[');
-            _bufferWriter.Append(context);
-            _bufferWriter.Append("] ");
+            _bufferWriter.Append("["u8);
+            _bufferWriter.Append(context.Span);
+            _bufferWriter.Append("] "u8);
         }
         return this;
     }
@@ -82,18 +83,11 @@ internal sealed class LogTextWriter : LogWriter
             switch (token)
             {
                 case TextToken textToken:
-                    _bufferWriter.Append(textToken.Text);
+                    _bufferWriter.Append(textToken.TextBytes.Span);
                     break;
                 case PropertyToken propertyToken:
-                    if (propertys.Length == 0)
-                    {
-                        _bufferWriter.Append(propertyToken.RawText.Text);
-                    }
-                    else
-                    {
-                        RenderPropertyToken(propertyToken, propertys, i);
-                        i++;
-                    }
+                    RenderPropertyToken(propertyToken, propertys, i);
+                    i++;
                     break;
             }
         }
@@ -111,113 +105,5 @@ internal sealed class LogTextWriter : LogWriter
     }
 
     // ========================================
-    #endregion
-
-
-
-    #region 辅助方法
-    // ================ 辅助方法 ================
-
-    private void RenderPropertyToken(PropertyToken propertyToken, object?[] propertys, int i)
-    {
-        try
-        {
-            // 获取要渲染的值
-            object? value = GetPropertyValue(propertys, i, out bool found);
-
-            if (!found)
-            {
-                // 如果找不到对应的参数，输出原始文本
-                _bufferWriter.Append(propertyToken.RawText.Text);
-                return;
-            }
-
-            if (value is null)
-            {
-                _bufferWriter.Append("null");
-                return;
-            }
-            // 当具有解构标识或设置了默认解构(且是集合类型)时, 尝试解构对象且跳过对齐和格式化(对json格式无意义)
-            if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
-            {
-                // 当遇到 {@...} 时，使用 JsonSerializer 把它变成一个易读的 JSON 字符串
-                _bufferWriter.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
-                return; // 处理完就返回, 跳过构建格式字符串
-            }
-
-            // 构建格式字符串，支持对齐和格式化
-            string formatString = BuildFormatString(propertyToken.Alignment, propertyToken.Format);
-            _bufferWriter.AppendFormat(formatString, value);
-        }
-        catch (Exception ex)
-        {
-            _bufferWriter.Append(propertyToken.RawText.Text);
-            InternalLogger.Error(ex, $"LogWriter WriteValue Failed: {propertyToken.RawText.Text}");
-        }
-    }
-
-    // 获取属性值
-    private static object? GetPropertyValue(object?[] propertys, int namedIndex, out bool found)
-    {
-        if (namedIndex >= propertys.Length || namedIndex < 0)
-        {
-            found = false;
-            return null;
-        }
-        found = true;
-        return propertys[namedIndex];
-    }
-
-    private static string BuildFormatString(int? alignment, string? format)
-    {
-        // 如果超长则回退到堆分配
-        // yyyy-MM-dd HH:mm:ss.fff zzz 在格式化中较长的时间格式化, 96个字符也足够容纳前面的例子x3了
-        if (format is not null && format.Length > 96) return BuildFormatStringByHeap(alignment, format);
-        Span<char> buffer = stackalloc char[128];
-        int pos = 0;
-
-        buffer[pos++] = '{';
-        buffer[pos++] = '0';
-
-        if (alignment.HasValue)
-        {
-            buffer[pos++] = ',';
-            alignment.Value.TryFormat(buffer[pos..], out int written);
-            pos += written;
-        }
-
-        if (!string.IsNullOrEmpty(format))
-        {
-            buffer[pos++] = ':';
-            format.AsSpan().CopyTo(buffer[pos..]);
-            pos += format.Length;
-        }
-
-        buffer[pos++] = '}';
-        return new string(buffer[..pos]);
-    }
-
-    // 构建格式字符串: {index,alignment:format}
-    private static string BuildFormatStringByHeap(int? alignment, string? format)
-    {
-        var sb = new StringBuilder("{0");
-
-        // 添加对齐: {0,10} 或 {0,-10}
-        if (alignment.HasValue)
-        {
-            sb.Append(',');
-            sb.Append(alignment.Value);
-        }
-
-        // 添加格式: {0:D} 或 {0,10:D}
-        if (!string.IsNullOrEmpty(format))
-        {
-            sb.Append(':');
-            sb.Append(format);
-        }
-
-        sb.Append('}');
-        return sb.ToString();
-    }
     #endregion
 }

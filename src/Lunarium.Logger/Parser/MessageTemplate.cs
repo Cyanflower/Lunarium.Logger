@@ -26,9 +26,48 @@ public enum Destructuring
 public record MessageTemplate
 {
     internal readonly IReadOnlyList<MessageTemplateTokens> MessageTemplateTokens;
+
+    internal readonly ReadOnlyMemory<byte> OriginalMessageBytes;
+
+
     internal MessageTemplate(MessageTemplateTokens[] messageTemplateTokens)
     {
         MessageTemplateTokens = messageTemplateTokens;
+        OriginalMessageBytes = BuildOriginalMessage(messageTemplateTokens);
+    }
+
+    private static ReadOnlyMemory<byte> BuildOriginalMessage(IReadOnlyList<MessageTemplateTokens> tokens)
+    {
+        int count = 0;
+        foreach (var token in tokens)
+        {
+            switch (token)
+            {
+                case TextToken textToken:
+                    count += textToken.TextBytes.Length;
+                    break;
+                case PropertyToken propertyToken:
+                    count += propertyToken.RawText.TextBytes.Length;
+                    break;
+            }
+        }
+        byte[] bytes = new byte[count];
+        int index = 0;
+        foreach (var token in tokens)
+        {
+            switch (token)
+            {
+                case TextToken textToken:
+                    textToken.TextBytes.CopyTo(bytes[index..]);
+                    index += textToken.TextBytes.Length;
+                    break;
+                case PropertyToken propertyToken:
+                    propertyToken.RawText.TextBytes.CopyTo(bytes[index..]);
+                    index += propertyToken.RawText.TextBytes.Length;
+                    break;
+            }
+        }
+        return bytes;
     }
 }
 
@@ -38,9 +77,11 @@ public abstract record MessageTemplateTokens;
 public record TextToken : MessageTemplateTokens
 {
     public string Text { get; }
+    public ReadOnlyMemory<byte> TextBytes { get; }
     internal TextToken(string text)
     {
         Text = text;
+        TextBytes = Encoding.UTF8.GetBytes(text);
     }
 }
 
@@ -50,7 +91,11 @@ public record PropertyToken : MessageTemplateTokens
     public TextToken RawText { get; }
     public string? Format { get; }
     public int? Alignment { get; }
+    public string FormatString { get; }
     public Destructuring Destructuring { get; }
+    
+    // byte area
+    public ReadOnlyMemory<byte> PropertyNameBytes { get; }
 
     internal PropertyToken(
         string propertyName,
@@ -65,5 +110,32 @@ public record PropertyToken : MessageTemplateTokens
         Format = format;
         Alignment = alignment;
         Destructuring = destructuring;
+        FormatString = BuildFormatString(alignment, format);
+
+        PropertyNameBytes = Encoding.UTF8.GetBytes(propertyName);
+    }
+
+    private static string BuildFormatString(int? alignment, string? format)
+    {
+        if (!alignment.HasValue && string.IsNullOrEmpty(format)) return "{0}";
+
+        var sb = new StringBuilder("{0");
+
+        // 添加对齐: {0,10} 或 {0,-10}
+        if (alignment.HasValue)
+        {
+            sb.Append(',');
+            sb.Append(alignment.Value);
+        }
+
+        // 添加格式: {0:D} 或 {0,10:D}
+        if (!string.IsNullOrEmpty(format))
+        {
+            sb.Append(':');
+            sb.Append(format);
+        }
+
+        sb.Append('}');
+        return sb.ToString();
     }
 }

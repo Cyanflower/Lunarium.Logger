@@ -17,27 +17,9 @@ using System.Collections.Concurrent;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Numerics;
 
 namespace Lunarium.Logger.Internal;
-
-#if DEBUG
-// [DEBUG] Diagnostic utilities for testing BufferWriter behavior
-internal static class BufferWriterDiagnostics
-{
-    internal static ConcurrentBag<BufferWriter> Diagnostics { get; } = new();
-
-    /// <summary>Check if any BufferWriter has ReturnCount > 1 (double return)</summary>
-    internal static bool HasAnyDoubleReturn()
-        => Diagnostics.Any(bw => Volatile.Read(ref bw._diagnosticReturnCount) > 1);
-
-    /// <summary>Sum of all BufferWriter return counts</summary>
-    internal static int TotalReturnCount()
-        => Diagnostics.Sum(bw => Volatile.Read(ref bw._diagnosticReturnCount));
-
-    /// <summary>Clear diagnostic collection (call before tests)</summary>
-    internal static void Clear() => Diagnostics.Clear();
-}
-#endif
 
 internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
 {
@@ -45,19 +27,11 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
     private byte[] _buffer;
     private int _index;
 
-#if DEBUG
-    // [DEBUG] Diagnostic: track ArrayPool.Return count per instance
-    internal int _diagnosticReturnCount = 0;
-#endif
-
     internal BufferWriter(int capacity = 4096)
     {
-        _buffer = ArrayPool<byte>.Shared.Rent(capacity);
+        if (capacity <= 0) _buffer = Array.Empty<byte>();
+        else _buffer = new byte[capacity];
         _index = 0;
-#if DEBUG
-        // [DEBUG]
-        BufferWriterDiagnostics.Diagnostics.Add(this);
-#endif
     }
 
     // ===== 低级 IBufferWriter<byte> API =====
@@ -142,6 +116,16 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
         Append(value.ToString());
     }
 
+    /// <summary>追加字节 span。</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void Append(ReadOnlySpan<byte> bytes)
+    {
+        if (bytes.IsEmpty) return;
+        EnsureCapacity(bytes.Length);
+        bytes.CopyTo(_buffer.AsSpan(_index));
+        _index += bytes.Length;
+    }
+
     /// <summary>追加换行符（Environment.NewLine）。</summary>
     internal void AppendLine()
     {
@@ -178,6 +162,12 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
 
     // ===== 缓冲区修改 =====
 
+    internal void Rewind(int index)
+    {
+        if (index < 0 || index > _index) throw new ArgumentOutOfRangeException(nameof(index));
+        _index = index;
+    }
+
     /// <summary>
     /// 移除末尾 count 个字节。用于去除 JSON 尾部逗号（单字节 ASCII）等场景，O(1)。
     /// </summary>
@@ -212,56 +202,45 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
 
     internal void Reset()
     {
-        if (SafetyClearConfig.SafetyClear)
-            _buffer.AsSpan(0, _index).Clear();
         _index = 0;
     }
 
     public void Dispose()
     {
-        byte[] buffer;
-        if (AtomicOpsConfig.BufferWriterDisposeInterlocked)
-            buffer = Interlocked.Exchange(ref _buffer, null!);
-        else
-        {
-            buffer = _buffer;
-            _buffer = null!;
-        }
-
-        if (buffer != null)
-        {
-            if (SafetyClearConfig.SafetyClear)
-                buffer.AsSpan(0, _index).Clear();
-            ArrayPool<byte>.Shared.Return(buffer);
-#if DEBUG
-            // [DEBUG]
-            Interlocked.Increment(ref _diagnosticReturnCount);
-#endif
-        }
+        _buffer = null!;
     }
 
     private void EnsureCapacity(int sizeHint)
     {
-        int request = sizeHint == 0 ? 1 : sizeHint;
-        if (_index + request > _buffer.Length)
+        // 1. 使用 uint 进行计算可以自然处理 int.MaxValue 附近的边界
+        uint request = (uint)(sizeHint <= 0 ? 1 : sizeHint);
+        uint minCapacity = (uint)_index + request;
+        if (minCapacity > (uint)_buffer.Length)
         {
-            int newSize = Math.Max(_buffer.Length * 2, _index + request);
-            if ((uint)newSize > MAX_ARRAY_SIZE)
+            uint newSize;
+            if (_buffer.Length == 0)
             {
-                newSize = Math.Max(_index + request, MAX_ARRAY_SIZE);
-                if ((uint)newSize > MAX_ARRAY_SIZE)
-                    throw new OutOfMemoryException("Requested buffer size exceeds maximum array length.");
+                newSize = Math.Max(minCapacity, 256u); // 给个初始阈值
+                // 如果初始值不是 2 的幂，对齐到 2 的幂
+                if (!BitOperations.IsPow2(newSize))
+                    newSize = 1u << (32 - BitOperations.LeadingZeroCount(newSize - 1));
             }
-
-            byte[] newBuffer = ArrayPool<byte>.Shared.Rent(newSize);
+            else
+            {
+                // 直接计算下一个 2 的幂
+                newSize = 1u << (32 - BitOperations.LeadingZeroCount(minCapacity - 1));
+            }
+            // 3. 边界检查：防止超过 .NET 数组最大限制
+            if (newSize > (uint)MAX_ARRAY_SIZE)
+            {
+                newSize = Math.Max(minCapacity, (uint)MAX_ARRAY_SIZE);
+                if (newSize > (uint)MAX_ARRAY_SIZE)
+                    throw new OutOfMemoryException("Buffer size limit exceeded.");
+            }
+            // 4. 执行分配
+            byte[] newBuffer = new byte[newSize];
             _buffer.AsSpan(0, _index).CopyTo(newBuffer);
-
-            byte[] oldBuffer = _buffer;
             _buffer = newBuffer;
-
-            if (SafetyClearConfig.SafetyClear) oldBuffer.AsSpan(0, _index).Clear();
-            
-            ArrayPool<byte>.Shared.Return(oldBuffer);
         }
     }
 }

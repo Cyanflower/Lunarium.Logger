@@ -13,7 +13,7 @@
 // limitations under the License.
 
 using System.Threading.Channels;
-using System.Text.RegularExpressions;
+using System.Text;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger;
@@ -36,6 +36,8 @@ internal sealed class Logger : ILogger, IAsyncDisposable
     // === 日志配置 ===
     // 日志记录器名称
     private readonly string _loggerName;
+    private readonly byte[] _loggerNameBytes;
+
     // 所有输出目标的列表
     private readonly List<Sink> _sinks;
 
@@ -50,8 +52,19 @@ internal sealed class Logger : ILogger, IAsyncDisposable
     {
         _sinks = sinks;
         _loggerName = loggerName;
+        _loggerNameBytes = Encoding.UTF8.GetBytes(loggerName);
         // 启动后台处理任务
         _processTask = Task.Run(ProcessQueueAsync);
+    }
+
+    public string GetContext()
+    {
+        return _loggerName;
+    }
+
+    public ReadOnlyMemory<byte> GetContextSpan()
+    {
+        return _loggerNameBytes;
     }
 
     /// <summary>
@@ -90,7 +103,7 @@ internal sealed class Logger : ILogger, IAsyncDisposable
     /// <summary>
     /// 创建一个日志条目并将其放入队列中等待异步处理。
     /// </summary>
-    public void Log(LogLevel level, string message = "", string context = "", Exception? ex = null, params object?[] propertyValues)
+    public void Log(LogLevel level, Exception? ex = null, string message = "", string context = "", ReadOnlyMemory<byte> contextBytes = default, string scope = "", params object?[] propertyValues)
     {
         try
         {
@@ -105,7 +118,9 @@ internal sealed class Logger : ILogger, IAsyncDisposable
                 logLevel: level,
                 message: message,
                 properties: propertyValues,
-                context: context,
+                context: string.IsNullOrEmpty(context) ? _loggerName : context,
+                contextBytes: contextBytes.IsEmpty ? _loggerNameBytes : contextBytes,
+                scope: scope,
                 messageTemplate: LogParser.EmptyMessageTemplate,
                 exception: ex
             );

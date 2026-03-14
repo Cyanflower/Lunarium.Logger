@@ -52,6 +52,8 @@ public class FilterBenchmarks
                 message: "test",
                 properties: Array.Empty<object?>(),
                 context: ctx,
+                contextBytes: System.Text.Encoding.UTF8.GetBytes(ctx),
+                scope: "",
                 messageTemplate: LogParser.EmptyMessageTemplate);
         }
     }
@@ -85,6 +87,8 @@ public class FilterBenchmarks
             message: "test",
             properties: Array.Empty<object?>(),
             context: "Order.Processor",
+            contextBytes: "Order.Processor"u8.ToArray(),
+            scope: "",
             messageTemplate: LogParser.EmptyMessageTemplate);
 
         _entryNonMatchingContext = new LogEntry(
@@ -94,6 +98,8 @@ public class FilterBenchmarks
             message: "test",
             properties: Array.Empty<object?>(),
             context: "System.Internal",
+            contextBytes: "System.Internal"u8.ToArray(),
+            scope: "",
             messageTemplate: LogParser.EmptyMessageTemplate);
 
         // 预热缓存，确保命中测试时直接走缓存路径

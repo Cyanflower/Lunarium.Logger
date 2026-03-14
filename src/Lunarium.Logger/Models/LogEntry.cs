@@ -26,7 +26,8 @@ namespace Lunarium.Logger.Models;
 /// <param name="MessageTemplate">日志消息模板。</param>
 /// <param name="Properties">与日志事件关联的结构化属性。</param>
 /// <param name="Context">日志的上下文信息（如来源模块）。</param>
-/// <param name="Caller">调用日志方法的成员名称。</param>
+/// <param name="ContextSpan">日志的上下文信息（如来源模块）。</param>
+/// <param name="Scope">日志的作用域。</param>
 /// <param name="Exception">与此日志关联的异常信息（如果有）。</param>
 
 public sealed record class LogEntry
@@ -38,6 +39,8 @@ public sealed record class LogEntry
     public string Message { get; }
     public object?[] Properties { get; }
     public string Context { get; }
+    public ReadOnlyMemory<byte> ContextBytes { get; }
+    public string Scope { get; }
     public Exception? Exception { get; }
 
     // 可读写属性，用于延迟解析和渲染
@@ -51,6 +54,8 @@ public sealed record class LogEntry
         string message,
         object?[] properties,
         string context,
+        ReadOnlyMemory<byte> contextBytes,
+        string scope,
         MessageTemplate messageTemplate,
         Exception? exception = null)
     {
@@ -60,6 +65,8 @@ public sealed record class LogEntry
         Message = message;
         Properties = properties;
         Context = context;
+        ContextBytes = contextBytes;
+        Scope = scope;
         MessageTemplate = messageTemplate;
         Exception = exception;
     }

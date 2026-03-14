@@ -37,6 +37,8 @@ internal sealed class LoggerFilter
     // 缓存已经检查过的上下文及其结果
     // Key: Context, Value: 是否应该输出
     private readonly ConcurrentDictionary<string, bool> _contextCache = new();
+    
+    private int _cacheCount = 0;
 
     internal LoggerFilter() { }
     /// <summary>
@@ -44,24 +46,34 @@ internal sealed class LoggerFilter
     /// </summary>
     internal bool ShouldEmit(LogEntry entry, SinkOutputConfig cfg)
     {
-        // 1. 首先检查日志级别
+        // 1. 首先检查日志级别过滤
         if (entry.LogLevel < cfg.LogMinLevel || entry.LogLevel > cfg.LogMaxLevel)
             return false;
 
-        // 2. 检查缓存
+        // 2. 执行上下文的过滤逻辑
+        // 2.1 检查缓存 - 缓存命中
         if (_contextCache.TryGetValue(entry.Context, out var cachedResult))
             return cachedResult;
 
-        // 3. 执行实际的过滤逻辑
+        // 2.2 执行上下文过滤检查 - 缓存未命中
         var shouldEmit = CheckContextFilters(entry.Context, cfg);
 
-        // 4. 更新缓存
-        if (_contextCache.Count >= CacheMaxCountLimit)
+        // 2.3 更新缓存与计数逻辑 (使用 TryAdd 替代 GetOrAdd + ReferenceEquals)
+        // TryAdd 只有在 Key 不存在并成功插入时才会返回 true
+        if (_contextCache.TryAdd(entry.Context, shouldEmit))
         {
-            _contextCache.Clear();
+            // 只有成功插入新项的线程才会增加计数器
+            var currentCount = Interlocked.Increment(ref _cacheCount);
+            
+            if (currentCount >= CacheMaxCountLimit)
+            {
+                // 原子性地将计数器重置为 0，且只有一个线程能拿到当时的旧值 >= Limit
+                if (Interlocked.Exchange(ref _cacheCount, 0) >= CacheMaxCountLimit)
+                {
+                    _contextCache.Clear();
+                }
+            }
         }
-
-        _contextCache[entry.Context] = shouldEmit;
 
         return shouldEmit;
     }

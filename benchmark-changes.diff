@@ -1,0 +1,277 @@
+diff --git a/benchmarks/Lunarium.Logger.Benchmarks/ConfigPerformanceBenchmarks.cs b/benchmarks/Lunarium.Logger.Benchmarks/ConfigPerformanceBenchmarks.cs
+deleted file mode 100644
+index 763ccda..0000000
+--- a/benchmarks/Lunarium.Logger.Benchmarks/ConfigPerformanceBenchmarks.cs
++++ /dev/null
+@@ -1,128 +0,0 @@
+-// Copyright 2026 Cyanflower
+-//
+-// Licensed under the Apache License, Version 2.0 (the "License");
+-// you may not use this file except in compliance with the License.
+-// You may obtain a copy of the License at
+-//
+-//     http://www.apache.org/licenses/LICENSE-2.0
+-//
+-// Unless required by applicable law or agreed to in writing, software
+-// distributed under the License is distributed on an "AS IS" BASIS,
+-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-// See the License for the specific language governing permissions and
+-// limitations under the License.
+-
+-using BenchmarkDotNet.Attributes;
+-using Lunarium.Logger.Models;
+-using Lunarium.Logger.Parser;
+-using Lunarium.Logger.Writer;
+-
+-namespace Lunarium.Logger.Benchmarks;
+-
+-/// <summary>
+-/// 测量 SafetyClear 和 BufferWriterInterlocked 配置的性能影响。
+-///
+-/// 关注点：
+-/// - SafetyClear 开销：Reset 时的 Array.Clear 调用
+-/// - BufferWriterInterlocked 开销：Dispose 时的 Interlocked.Exchange 调用
+-///
+-/// 注意：由于配置是静态全局的，Benchmark 之间会共享配置状态。
+-/// 某些场景可能需要单独运行以获得准确对比数据。
+-/// </summary>
+-[MemoryDiagnoser]
+-public class ConfigPerformanceBenchmarks
+-{
+-    private LogEntry _entry = null!;
+-
+-    [GlobalSetup]
+-    public void Setup()
+-    {
+-        BenchmarkHelper.EnsureGlobalConfig();
+-        _entry = new LogEntry(
+-            loggerName: "Bench",
+-            timestamp: DateTimeOffset.UtcNow,
+-            logLevel: LogLevel.Info,
+-            message: "User {Name} logged in from {Ip}",
+-            properties: new object?[] { "Alice", "192.168.1.1" },
+-            context: "Auth.Service",
+-            messageTemplate: LogParser.ParseMessage("User {Name} logged in from {Ip}"));
+-    }
+-
+-    // ==================== Full Pipeline (Default Config) ====================
+-
+-    [Benchmark(Baseline = true, Description = "FullPipeline: 默认配置（无 SafetyClear/Interlocked）")]
+-    public void FullPipeline_Default()
+-    {
+-        var w = WriterPool.Get<LogTextWriter>();
+-        try { w.Render(_entry); w.FlushTo(Stream.Null); }
+-        finally { w.Return(); }
+-    }
+-
+-    // ==================== Reset Overhead Simulation ====================
+-
+-    [Benchmark(Description = "Reset: 仅索引重置（模拟 SafetyClear=false）")]
+-    public void Reset_IndexOnly()
+-    {
+-        var w = WriterPool.Get<LogTextWriter>();
+-        try
+-        {
+-            w.Render(_entry);
+-            // TryReset 只重置索引，不清空 buffer
+-        }
+-        finally { w.Return(); }
+-    }
+-
+-    [Benchmark(Description = "Reset: 含 Array.Clear（模拟 SafetyClear=true，每次渲染后）")]
+-    public void Reset_WithArrayClear()
+-    {
+-        var w = WriterPool.Get<LogTextWriter>();
+-        try
+-        {
+-            w.Render(_entry);
+-            // 模拟 SafetyClear 的开销：分配临时数组并清除
+-            // 实际 SafetyClear 清除的是内部 buffer 的已写入区域
+-            // 这里用临时数组模拟 Array.Clear 的开销
+-            var temp = new byte[256];
+-            Array.Clear(temp);
+-        }
+-        finally { w.Return(); }
+-    }
+-
+-    // ==================== Dispose Overhead ====================
+-
+-    [Benchmark(Description = "Dispose: 无 Interlocked（模拟默认）")]
+-    public void Dispose_WithoutInterlocked()
+-    {
+-        // 每次创建新 Writer 并 Dispose（模拟被池拒绝的场景）
+-        var w = new LogTextWriter();
+-        w.Render(_entry);
+-        w.Dispose();
+-    }
+-
+-    [Benchmark(Description = "Dispose: 含 Interlocked.Exchange（模拟 BufferWriterInterlocked=true）")]
+-    public void Dispose_WithInterlocked()
+-    {
+-        // 使用 Interlocked 版本的 Dispose
+-        // 注意：实际差异来自 BufferWriter.Dispose() 中的 Interlocked.Exchange
+-        // 由于 LogWriter 已有 CompareExchange 防护，BufferWriter 层的 Interlocked 是双重保险
+-        var w = new LogTextWriter();
+-        w.Render(_entry);
+-        w.Dispose();
+-    }
+-
+-    // ==================== Pool Get/Return ====================
+-
+-    [Benchmark(Description = "Pool: Get + Return（完整池化周期）")]
+-    public void Pool_GetAndReturn()
+-    {
+-        var w = WriterPool.Get<LogTextWriter>();
+-        WriterPool.Return(w);
+-    }
+-
+-    [Benchmark(Description = "Alloc: new + Dispose（无池化）")]
+-    public void Alloc_NewAndDispose()
+-    {
+-        var w = new LogTextWriter();
+-        w.Dispose();
+-    }
+-}
+diff --git a/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs b/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs
+index a574ff6..556c1f0 100644
+--- a/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs
++++ b/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs
+@@ -52,6 +52,8 @@ public class FilterBenchmarks
+                 message: "test",
+                 properties: Array.Empty<object?>(),
+                 context: ctx,
++                contextBytes: System.Text.Encoding.UTF8.GetBytes(ctx),
++                scope: "",
+                 messageTemplate: LogParser.EmptyMessageTemplate);
+         }
+     }
+@@ -85,6 +87,8 @@ public class FilterBenchmarks
+             message: "test",
+             properties: Array.Empty<object?>(),
+             context: "Order.Processor",
++            contextBytes: "Order.Processor"u8.ToArray(),
++            scope: "",
+             messageTemplate: LogParser.EmptyMessageTemplate);
+ 
+         _entryNonMatchingContext = new LogEntry(
+@@ -94,6 +98,8 @@ public class FilterBenchmarks
+             message: "test",
+             properties: Array.Empty<object?>(),
+             context: "System.Internal",
++            contextBytes: "System.Internal"u8.ToArray(),
++            scope: "",
+             messageTemplate: LogParser.EmptyMessageTemplate);
+ 
+         // 预热缓存，确保命中测试时直接走缓存路径
+diff --git a/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs b/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs
+index 60f4cd1..61e82e8 100644
+--- a/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs
++++ b/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs
+@@ -22,6 +22,8 @@ public class LogWriterBenchmarks
+     private LogEntry _entrySingleProp = null!;
+     private LogEntry _entryMultiProp = null!;
+     private LogEntry _entryWithFormatAlign = null!;
++    private LogEntry _entryNumeric = null!;
++    private LogEntry _entryComplex = null!;
+ 
+     [GlobalSetup]
+     public void Setup()
+@@ -35,7 +37,9 @@ public class LogWriterBenchmarks
+             logLevel: LogLevel.Info,
+             message: "Application started successfully",
+             properties: Array.Empty<object?>(),
+-            context: "",
++            context: "Bench",
++            contextBytes: "Bench"u8.ToArray(),
++            scope: "",
+             messageTemplate: LogParser.ParseMessage("Application started successfully"));
+ 
+         _entrySingleProp = new LogEntry(
+@@ -45,6 +49,8 @@ public class LogWriterBenchmarks
+             message: "User {Name} logged in",
+             properties: new object?[] { "Alice" },
+             context: "Auth.Service",
++            contextBytes: "Auth.Service"u8.ToArray(),
++            scope: "",
+             messageTemplate: LogParser.ParseMessage("User {Name} logged in"));
+ 
+         _entryMultiProp = new LogEntry(
+@@ -54,6 +60,8 @@ public class LogWriterBenchmarks
+             message: "Request {Method} {Url} completed in {Duration}ms with status {Status}",
+             properties: new object?[] { "GET", "/api/users", 42, 200 },
+             context: "Http.Middleware",
++            contextBytes: "Http.Middleware"u8.ToArray(),
++            scope: "",
+             messageTemplate: LogParser.ParseMessage("Request {Method} {Url} completed in {Duration}ms with status {Status}"));
+ 
+         _entryWithFormatAlign = new LogEntry(
+@@ -63,7 +71,31 @@ public class LogWriterBenchmarks
+             message: "{Count,8:D} items processed, {Percent:P1} complete",
+             properties: new object?[] { 12345, 0.8765 },
+             context: "Worker",
++            contextBytes: "Worker"u8.ToArray(),
++            scope: "",
+             messageTemplate: LogParser.ParseMessage("{Count,8:D} items processed, {Percent:P1} complete"));
++
++        _entryNumeric = new LogEntry(
++            loggerName: "Bench",
++            timestamp: ts,
++            logLevel: LogLevel.Info,
++            message: "Process {Id} at {Time} spent {Duration}",
++            properties: new object?[] { 12345, ts, TimeSpan.FromMilliseconds(420) },
++            context: "System",
++            contextBytes: "System"u8.ToArray(),
++            scope: "",
++            messageTemplate: LogParser.ParseMessage("Process {Id} at {Time} spent {Duration}"));
++
++        _entryComplex = new LogEntry(
++            loggerName: "Bench",
++            timestamp: ts,
++            logLevel: LogLevel.Info,
++            message: "Request context: {@Payload}",
++            properties: new object?[] { new { Id = 1, Name = "Test", Tags = new[] { "tag1", "tag2" } } },
++            context: "API",
++            contextBytes: "API"u8.ToArray(),
++            scope: "",
++            messageTemplate: LogParser.ParseMessage("Request context: {@Payload}"));
+     }
+ 
+     // ==================== LogTextWriter ====================
+@@ -100,6 +132,14 @@ public class LogWriterBenchmarks
+         finally { w.Return(); }
+     }
+ 
++    [Benchmark(Description = "Text: Numeric/Formattable (int, DateTimeOffset, TimeSpan)")]
++    public void Text_Numeric()
++    {
++        var w = WriterPool.Get<LogTextWriter>();
++        try { w.Render(_entryNumeric); w.FlushTo(Stream.Null); }
++        finally { w.Return(); }
++    }
++
+     // ==================== LogColorTextWriter ====================
+ 
+     [Benchmark(Description = "Color: 单属性（含 ANSI 颜色转义代码）")]
+@@ -136,6 +176,22 @@ public class LogWriterBenchmarks
+         finally { w.Return(); }
+     }
+ 
++    [Benchmark(Description = "JSON: Numeric/Formattable")]
++    public void Json_Numeric()
++    {
++        var w = WriterPool.Get<LogJsonWriter>();
++        try { w.Render(_entryNumeric); w.FlushTo(Stream.Null); }
++        finally { w.Return(); }
++    }
++
++    [Benchmark(Description = "JSON: Complex Object (@Destructure)")]
++    public void Json_ComplexObject()
++    {
++        var w = WriterPool.Get<LogJsonWriter>();
++        try { w.Render(_entryComplex); w.FlushTo(Stream.Null); }
++        finally { w.Return(); }
++    }
++
+     // ==================== WriterPool 对象池收益 ====================
+ 
+     [Benchmark(Description = "Pool: WriterPool.Get<LogTextWriter>() + Return()（池化路径）")]

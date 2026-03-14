@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System.Buffers;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
@@ -21,13 +22,26 @@ namespace Lunarium.Logger.Writer;
 
 internal sealed class LogJsonWriter : LogWriter
 {
-    private Utf8JsonWriter? _jsonWriter;
+    private const int DefaultMaxCapacity = 32 * 1024; // Utf8JsonWriter 默认32KB阈值
 
-    private Utf8JsonWriter JsonWriter => _jsonWriter ??= new Utf8JsonWriter(_bufferWriter, new JsonWriterOptions
-    {
-        Indented = JsonSerializationConfig.Options.WriteIndented,
-        Encoder = JsonSerializationConfig.Options.Encoder
-    });
+    private static readonly JsonEncodedText TimestampKey = JsonEncodedText.Encode("Timestamp");
+    private static readonly JsonEncodedText LevelKey     = JsonEncodedText.Encode("Level");
+    private static readonly JsonEncodedText LogLevelKey  = JsonEncodedText.Encode("LogLevel");
+    private static readonly JsonEncodedText MsgKey       = JsonEncodedText.Encode("OriginalMessage");
+    private static readonly JsonEncodedText RenderedKey  = JsonEncodedText.Encode("RenderedMessage");
+    private static readonly JsonEncodedText PropertysKey = JsonEncodedText.Encode("Propertys");
+    private static readonly JsonEncodedText ContextKey   = JsonEncodedText.Encode("Context");
+    private static readonly JsonEncodedText ExceptionKey = JsonEncodedText.Encode("Exception");
+
+    // 专用于处理临时缓冲区, 用于单次方法执行, 严格遵循用处用前重置和用后原地重置
+    private readonly BufferWriter _scratchWriter = new();
+
+    // 主写入器
+    private readonly Utf8JsonWriter _jsonWriter = new(Stream.Null, new JsonWriterOptions
+        {
+            Indented = JsonSerializationConfig.Options.WriteIndented,
+            Encoder = JsonSerializationConfig.Options.Encoder
+        });
 
     protected override void ReturnToPool() => WriterPool.Return(this);
 
@@ -35,48 +49,75 @@ internal sealed class LogJsonWriter : LogWriter
 
     protected override LogWriter BeginEntry()
     {
-        JsonWriter.Reset(_bufferWriter);
-        JsonWriter.WriteStartObject();
+        _jsonWriter.Reset(_bufferWriter);
+        _jsonWriter.WriteStartObject();
         return this;
     }
 
     protected override LogWriter EndEntry()
     {
-        JsonWriter.WriteEndObject();
-        JsonWriter.Flush();
+        _jsonWriter.WriteEndObject();
+        _jsonWriter.Flush();
         return this;
     }
 
     protected override void BeforeRenderMessage(LogEntry logEntry)
     {
-        WriteOriginalMessage(JsonWriter, logEntry.MessageTemplate.MessageTemplateTokens);
+        _jsonWriter.WriteString(MsgKey, logEntry.MessageTemplate.OriginalMessageBytes.Span);
     }
 
     protected override void AfterRenderMessage(LogEntry logEntry)
     {
-        WritePropertyValue(JsonWriter, logEntry.MessageTemplate.MessageTemplateTokens, logEntry.Properties);
+        WritePropertyValue(_jsonWriter, logEntry.MessageTemplate.MessageTemplateTokens, logEntry.Properties);
     }
 
+    /// <summary>
+    /// 尝试重置写入器以供重用, 如果对象因状态异常 (如缓冲区过大) 而不适合重用, 则返回 false
+    /// </summary>
+    /// <param name="maxCapacity">允许的最大缓冲区容量, 超过此容量的对象将被视为不健康, 默认4KB阈值, 该参数对 JsonWriter 无效 (因为 Utf8JsonWriter 贪婪申请, 4KB会造成永远无法归池)</param>
+    /// <returns>如果对象已成功重置并适合归还池中, 则为 true；否则为 false</returns>
+    internal override bool TryReset(int maxCapacity)
+    {
+        if (_bufferWriter.Capacity > maxCapacity || _scratchWriter.Capacity > maxCapacity)
+        {
+            // 对象被污染, 不应归还
+            return false;
+        }
+
+        // 对象健康, 清理并准备重用
+        _bufferWriter.Reset();
+        _scratchWriter.Reset();
+        _jsonWriter.Reset(_bufferWriter);
+
+        return true;
+    }
     #endregion
 
     #region Write Methods
 
     protected override LogWriter WriteTimestamp(DateTimeOffset timestamp)
     {
-        JsonWriter.WritePropertyName("Timestamp");
         switch (TimestampFormatConfig.JsonMode)
         {
             case JsonTimestampMode.Unix:
-                JsonWriter.WriteNumberValue(timestamp.ToUnixTimeSeconds());
+                _jsonWriter.WriteNumber(TimestampKey, timestamp.ToUnixTimeSeconds());
                 break;
             case JsonTimestampMode.UnixMs:
-                JsonWriter.WriteNumberValue(timestamp.ToUnixTimeMilliseconds());
+                _jsonWriter.WriteNumber(TimestampKey, timestamp.ToUnixTimeMilliseconds());
                 break;
             case JsonTimestampMode.ISO8601:
-                JsonWriter.WriteStringValue(timestamp.ToString("O"));
+                Span<byte> isoBuffer = stackalloc byte[32];
+                if (timestamp.TryFormat(isoBuffer, out int writtenIso, "O", CultureInfo.InvariantCulture))
+                {
+                    _jsonWriter.WriteString(TimestampKey, isoBuffer[..writtenIso]);
+                }
                 break;
             case JsonTimestampMode.Custom:
-                JsonWriter.WriteStringValue(timestamp.ToString(TimestampFormatConfig.JsonCustomFormat));
+                Span<byte> customBuffer = stackalloc byte[64];
+                if (timestamp.TryFormat(customBuffer, out int writtenCustom, TimestampFormatConfig.JsonCustomFormat, CultureInfo.InvariantCulture))
+                {
+                    _jsonWriter.WriteString(TimestampKey, customBuffer[..writtenCustom]);
+                }
                 break;
         }
         return this;
@@ -84,91 +125,157 @@ internal sealed class LogJsonWriter : LogWriter
 
     protected override LogWriter WriteLevel(LogLevel level)
     {
-        JsonWriter.WriteString("Level", level.ToString());
-        JsonWriter.WriteNumber("LogLevel", (int)level);
+        _jsonWriter.WritePropertyName(LevelKey);
+        _jsonWriter.WriteStringValue(level switch {
+            LogLevel.Debug => "Debug"u8,
+            LogLevel.Info => "Information"u8,
+            LogLevel.Warning => "Warning"u8,
+            LogLevel.Error => "Error"u8,
+            LogLevel.Critical => "Critical"u8,
+            _ => "Unknown"u8
+        });
+        _jsonWriter.WriteNumber(LogLevelKey, (int)level);
         return this;
     }
 
-    protected override LogWriter WriteContext(string? context)
+    protected override LogWriter WriteContext(ReadOnlyMemory<byte> context)
     {
-        if (!string.IsNullOrEmpty(context))
+        if (!context.IsEmpty)
         {
-            JsonWriter.WriteString("Context", context);
+            _jsonWriter.WriteString(ContextKey, context.Span);
         }
         return this;
-    }
-
-    private void WriteOriginalMessage(Utf8JsonWriter json, IReadOnlyList<MessageTemplateTokens> tokens)
-    {
-        json.WriteString("OriginalMessage", BuildOriginalMessage(tokens));
-    }
-
-    private static string BuildOriginalMessage(IReadOnlyList<MessageTemplateTokens> tokens)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var token in tokens)
-        {
-            switch (token)
-            {
-                case TextToken textToken:
-                    sb.Append(textToken.Text);
-                    break;
-                case PropertyToken propertyToken:
-                    sb.Append(propertyToken.RawText.Text);
-                    break;
-            }
-        }
-        return sb.ToString();
     }
 
     protected override LogWriter WriteRenderedMessage(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys)
     {
-        JsonWriter.WriteString("RenderedMessage", BuildRenderedMessage(tokens, propertys));
-        return this;
-    }
-
-    private string BuildRenderedMessage(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys)
-    {
-        var sb = new System.Text.StringBuilder();
-        int propIndex = 0;
+        _scratchWriter.Reset();
+        int i = 0;
 
         foreach (var token in tokens)
         {
             switch (token)
             {
                 case TextToken textToken:
-                    sb.Append(textToken.Text);
+                    _scratchWriter.Append(textToken.TextBytes.Span);
                     break;
                 case PropertyToken propertyToken:
-                    if (propIndex < propertys.Length)
-                    {
-                        sb.Append(FormatPropertyValue(propertyToken, propertys[propIndex]));
-                        propIndex++;
-                    }
-                    else
-                    {
-                        sb.Append(propertyToken.RawText.Text);
-                    }
+                    RenderPropertyToken(propertyToken, propertys, i);
+                    i++;
                     break;
             }
         }
-
-        return sb.ToString();
+        _jsonWriter.WriteString(RenderedKey, _scratchWriter.WrittenSpan);
+        _scratchWriter.Reset();
+        return this;
     }
 
-    private static string FormatPropertyValue(PropertyToken propertyToken, object? value)
-    {
-        if (value is null)
-            return "null";
 
+    protected override void RenderPropertyToken(PropertyToken propertyToken, object?[] propertys, int i)
+    {
         try
         {
-            return string.Format(CultureInfo.InvariantCulture, $"{{0:{propertyToken.Format}}}", value);
+            // ================
+            // 1. 获取值
+            // ================
+            // 获取要渲染的值
+            object? value = GetPropertyValue(propertys, i, out bool found);
+
+            if (!found)
+            {
+                // 如果找不到对应的参数，输出原始文本
+                _scratchWriter.Append(propertyToken.RawText.TextBytes.Span);
+                return;
+            }
+            // 或值是 null, 直接输出 null (utf8字面量)
+            if (value is null)
+            {
+                _scratchWriter.Append("null"u8);
+                return;
+            }
+
+            // 当具有解构标识或设置了默认解构(且是集合类型)时, 尝试解构对象且跳过对齐和格式化(对json格式无意义)
+            if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
+            {
+                // JsonWriter 的 RenderedMessage 不显示解构后的对象
+                // 解构对象只存储于 Properties 字段中
+                _scratchWriter.Append(value.ToString());
+                return; // 处理完就返回, 跳过构建格式字符串, Json不能使用对齐和格式化
+            }
+
+            // 高性能快路径：处理所有数值/时间类型 (IUtf8SpanFormattable)
+            if (value is IUtf8SpanFormattable formattable)
+            {
+                if (!propertyToken.Alignment.HasValue)
+                {
+                    // [极致优化] 无对齐：直接写入 BufferWriter，0 分配
+                    _scratchWriter.AppendFormattable(formattable, propertyToken.Format);
+                    return;
+                }
+                else
+                {
+                    // [极致优化] 有对齐：手动补空格，避免 string.Format 解析开销
+                    WriteAligned(propertyToken.Alignment.Value, formattable, propertyToken.Format);
+                    return;
+                }
+            }
+
+            // 构建格式字符串，支持对齐和格式化
+            _scratchWriter.AppendFormat(propertyToken.FormatString, value);
         }
         catch (Exception ex)
         {
-            InternalLogger.Error(ex, $"LogJsonWriter FormatPropertyValue Failed: {propertyToken.RawText.Text}");
-            return propertyToken.RawText.Text;
+            _scratchWriter.Append(propertyToken.RawText.TextBytes.Span);
+            InternalLogger.Error(ex, $"LogWriter WriteValue Failed: {propertyToken.PropertyName}");
+        }
+    }
+
+    protected override void WriteAligned(int alignment, IUtf8SpanFormattable content, string? format)
+    {
+        Span<byte> temp = stackalloc byte[128];
+
+        // 尝试格式化
+        if (content.TryFormat(temp, out int written, format, CultureInfo.InvariantCulture))
+        {
+            // 计算需要的空格数
+            int padding = Math.Abs(alignment) - written;
+            // 如果内容已经超过或等于对齐宽度，直接写内容
+            if (padding <= 0)
+            {
+                _scratchWriter.Append(temp[..written]);
+                return;
+            }
+            // 3. 根据正负值处理左/右对齐
+            if (alignment > 0) // 右对齐: [  123]
+            {
+                AppendPadding(padding);
+                _scratchWriter.Append(temp[..written]);
+            }
+            else // 左对齐: [123  ]
+            {
+                _scratchWriter.Append(temp[..written]);
+                AppendPadding(padding);
+            }
+        }
+        else
+        {
+            // 极小概率失败（如格式符极其复杂），回退到通用路径或直接输出
+            _scratchWriter.AppendFormattable(content, format);
+        }
+    }
+
+    protected override void AppendPadding(int count)
+    {
+        // 如果需要的空格在池子范围内，直接 MemoryCopy
+        if (count <= SpacePool.Length)
+        {
+            _scratchWriter.Append(SpacePool[..count]);
+        }
+        else
+        {
+            // 超过池子范围再回退到 Fill
+            _scratchWriter.GetSpan(count)[..count].Fill((byte)' ');
+            _scratchWriter.Advance(count);
         }
     }
 
@@ -178,7 +285,7 @@ internal sealed class LogJsonWriter : LogWriter
         Justification = "Same as IL2026.")]
     private void WritePropertyValue(Utf8JsonWriter json, IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys)
     {
-        json.WriteStartObject("Propertys");
+        json.WriteStartObject(PropertysKey);
 
         if (propertys.Length != 0)
         {
@@ -193,10 +300,31 @@ internal sealed class LogJsonWriter : LogWriter
                     {
                         json.WriteNullValue();
                     }
-                    else if (propertyToken.Destructuring == Destructuring.Destructure ||
-                             (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(propertys[i])))
+                    else if (
+                        propertyToken.Destructuring == Destructuring.Destructure ||
+                        (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(propertys[i])))
                     {
-                        JsonSerializer.Serialize(json, propertys[i], JsonSerializationConfig.Options);
+                        if (propertys[i] is IDestructurable destructurable)
+                        {
+                            var destructureHelper = new DestructureHelper(_scratchWriter, true, _serializerWriter, true);
+                            
+                            destructurable.Destructure(destructureHelper);
+
+                            if (destructureHelper.TryFlush())
+                            {
+                                _jsonWriter.WriteRawValue(_scratchWriter.WrittenSpan);
+                            }
+
+                            destructureHelper.Dispose(true, true);
+                        }
+                        else if (propertys[i] is IDestructured destructured)
+                        {
+                            _jsonWriter.WriteRawValue(destructured.Destructured().Span);
+                        }
+                        else
+                        {
+                            JsonSerializer.Serialize(json, propertys[i], JsonSerializationConfig.Options);
+                        }
                     }
                     else
                     {
@@ -247,21 +375,21 @@ internal sealed class LogJsonWriter : LogWriter
                 break;
             case double d:
                 if (double.IsNaN(d))
-                    json.WriteStringValue("NaN");
+                    json.WriteStringValue("NaN"u8);
                 else if (double.IsPositiveInfinity(d))
-                    json.WriteStringValue("Infinity");
+                    json.WriteStringValue("Infinity"u8);
                 else if (double.IsNegativeInfinity(d))
-                    json.WriteStringValue("-Infinity");
+                    json.WriteStringValue("-Infinity"u8);
                 else
                     json.WriteNumberValue(d);
                 break;
             case float f:
                 if (float.IsNaN(f))
-                    json.WriteStringValue("NaN");
+                    json.WriteStringValue("NaN"u8);
                 else if (float.IsPositiveInfinity(f))
-                    json.WriteStringValue("Infinity");
+                    json.WriteStringValue("Infinity"u8);
                 else if (float.IsNegativeInfinity(f))
-                    json.WriteStringValue("-Infinity");
+                    json.WriteStringValue("-Infinity"u8);
                 else
                     json.WriteNumberValue(f);
                 break;
@@ -272,22 +400,21 @@ internal sealed class LogJsonWriter : LogWriter
                 json.WriteStringValue(s);
                 break;
             case char c:
-                json.WriteStringValue(c.ToString());
+                Span<char> charSpan = stackalloc char[1] { c };
+                json.WriteStringValue(charSpan);
                 break;
-            case DateTime dt:
-                json.WriteStringValue(dt.ToString("O"));
-                break;
-            case DateTimeOffset dto:
-                json.WriteStringValue(dto.ToString("O"));
-                break;
-            case Guid g:
-                json.WriteStringValue(g.ToString());
-                break;
-            case TimeSpan ts:
-                json.WriteStringValue(ts.ToString());
-                break;
-            case Uri u:
-                json.WriteStringValue(u.ToString());
+            case IUtf8SpanFormattable formattable:
+                Span<byte> utf8Buffer = stackalloc byte[128]; 
+                ReadOnlySpan<char> fmt = (value is DateTime or DateTimeOffset) ? "O" : default;
+                
+                if (formattable.TryFormat(utf8Buffer, out int written, fmt, CultureInfo.InvariantCulture))
+                {
+                    json.WriteStringValue(utf8Buffer[..written]);
+                }
+                else
+                {
+                    json.WriteStringValue(value.ToString());
+                }
                 break;
             default:
                 json.WriteStringValue(value.ToString());
@@ -299,7 +426,7 @@ internal sealed class LogJsonWriter : LogWriter
     {
         if (exception != null)
         {
-            JsonWriter.WriteString("Exception", exception.ToString());
+            _jsonWriter.WriteString(ExceptionKey, exception.ToString());
         }
         return this;
     }

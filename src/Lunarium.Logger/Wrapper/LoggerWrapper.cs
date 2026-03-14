@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+using System.Text;
+
 namespace Lunarium.Logger.Wrapper;
 
 /// <summary>
@@ -24,6 +26,7 @@ internal sealed class LoggerWrapper : ILogger
     private readonly ILogger _logger;
     // 此包装器要附加的上下文
     private readonly string _context;
+    private readonly byte[] _contextBytes;
 
     /// <summary>
     /// 初始化一个新的 LoggerWrapper 实例。
@@ -33,22 +36,56 @@ internal sealed class LoggerWrapper : ILogger
     internal LoggerWrapper(ILogger logger, string context)
     {
         _logger = logger;
-        _context = context;
+        _context = $"{logger.GetContext()}.{context}";
+        _contextBytes = Encoding.UTF8.GetBytes(_context);
+    }
+
+    public string GetContext()
+    {
+        return _context;
+    }
+
+    public ReadOnlyMemory<byte> GetContextSpan()
+    {
+        return _contextBytes;
     }
 
     /// <summary>
     /// 记录一条日志。它会将自己的上下文与传入的上下文组合，然后传递给被包装的日志记录器。
     /// </summary>
-    public void Log(LogLevel level, string message = "", string context = "", Exception? ex = null, params object?[] propertyValues)
+    public void Log(LogLevel level, Exception? ex = null, string message = "", string context = "", ReadOnlyMemory<byte> contextBytes = default, string scope = "", params object?[] propertyValues)
     {
-        // 处理多重包装时的上下文路径，格式为 "外层上下文/内层上下文"
-        var finalContext = string.IsNullOrEmpty(context) ? _context : $"{_context}.{context}";
-        // 调用被包装的日志实例的 Log 方法
-        _logger.Log(level, message, finalContext, ex, propertyValues);
+        // 快速路径：使用者没有提供额外的即时 context
+        if (string.IsNullOrEmpty(context))
+        {
+            // 直接透传固化好的字符串引用和字节引用，实现零分配调用
+            _logger.Log(
+                level: level,
+                ex: ex,
+                message: message,
+                context: _context,
+                contextBytes: _contextBytes,
+                scope: scope,
+                propertyValues: propertyValues);
+            return;
+        }
+
+        // 慢速路径：提供了额外的即时上下文，分配不可避免
+        // 此时传递拼接后的字符串，但 bytes 传 default (除非调用方自己带了 bytes)
+        // 这样底层的 LogWriter 如果发现 bytes 为空，会 fallback 到对新字符串进行编码
+        var tempContext = $"{_context}.{context}";
+        _logger.Log(
+            level: level,
+            ex: ex,
+            message: message,
+            context: tempContext,
+            contextBytes: Encoding.UTF8.GetBytes(tempContext), 
+            scope: scope,
+            propertyValues: propertyValues);
     }
 
     /// <summary>
-    // 包装器不应该直接穿透 Dispose 直接销毁掉根日志实例，会导致以该根日志实例为基础的所有日志系统关闭 
+    /// 包装器不应该直接穿透 Dispose 直接销毁掉根日志实例，会导致以该根日志实例为基础的所有日志系统关闭 
     /// </summary>
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

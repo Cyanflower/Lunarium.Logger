@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System.Text;
+using System.Globalization;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger.Writer;
@@ -26,11 +27,11 @@ internal sealed class LogColorTextWriter : LogWriter
 {
     // =============== 编译时常量区 ===============
     // ANSI 指令的前缀
-    private const string AnsiPrefix = "\x1b["; // \x1b 是 ESC 字符的十六进制表示
+    private static ReadOnlySpan<byte> AnsiPrefix => "\x1b["u8; // \x1b 是 ESC 字符的十六进制表示
     // 重置所有颜色和样式的指令
-    private const string AnsiReset = "\x1b[0m";
-    private const string prefix = $"{AnsiPrefix}90m[{AnsiReset}";
-    private const string suffix = $"{AnsiPrefix}90m]{AnsiReset}";
+    private static ReadOnlySpan<byte> AnsiReset => "\x1b[0m"u8;
+    private static ReadOnlySpan<byte> Prefix => "\x1b[90m[\x1b[0m"u8;
+    private static ReadOnlySpan<byte> Suffix => "\x1b[90m]\x1b[0m"u8;
     // ===== 颜色定义 =====
     private const ConsoleColor TimestampColor = ConsoleColor.Green;
     private const ConsoleColor LevelDebugColor = ConsoleColor.DarkGray;
@@ -56,7 +57,7 @@ internal sealed class LogColorTextWriter : LogWriter
     // =============== 公共 API ===============
     protected override LogColorTextWriter WriteTimestamp(DateTimeOffset timestamp)
     {
-        _bufferWriter.Append(prefix);
+        _bufferWriter.Append(Prefix);
         SetColor(TimestampColor);
         switch (TimestampFormatConfig.TextMode)
         {
@@ -73,7 +74,7 @@ internal sealed class LogColorTextWriter : LogWriter
                 _bufferWriter.AppendFormattable(timestamp, TimestampFormatConfig.TextCustomFormat.AsSpan());
                 break;
         }
-        _bufferWriter.Append(suffix);
+        _bufferWriter.Append(Suffix);
         _bufferWriter.Append(' ');
         return this;
     }
@@ -82,12 +83,12 @@ internal sealed class LogColorTextWriter : LogWriter
     {
         var levelStr = level switch
         {
-            LogLevel.Debug => "DBG",
-            LogLevel.Info => "INF",
-            LogLevel.Warning => "WRN",
-            LogLevel.Error => "ERR",
-            LogLevel.Critical => "CRT",
-            _ => "UNK"
+            LogLevel.Debug => "DBG"u8,
+            LogLevel.Info => "INF"u8,
+            LogLevel.Warning => "WRN"u8,
+            LogLevel.Error => "ERR"u8,
+            LogLevel.Critical => "CRT"u8,
+            _ => "UNK"u8
         };
         Action levelColor = level switch
         {
@@ -98,23 +99,23 @@ internal sealed class LogColorTextWriter : LogWriter
             LogLevel.Critical => () => SetColor(ConsoleColor.White, LevelCriticalBgColor),
             _ => () => SetColor(ConsoleColor.White, ConsoleColor.Yellow)
         };
-        _bufferWriter.Append(prefix);
+        _bufferWriter.Append(Prefix);
         levelColor.Invoke();
         _bufferWriter.Append(levelStr);
         _bufferWriter.Append(AnsiReset);
-        _bufferWriter.Append(suffix);
+        _bufferWriter.Append(Suffix);
         _bufferWriter.Append(' ');
         return this;
     }
 
-    protected override LogColorTextWriter WriteContext(string? context)
+    protected override LogColorTextWriter WriteContext(ReadOnlyMemory<byte> context)
     {
-        if (!string.IsNullOrEmpty(context))
+        if (!context.IsEmpty)
         {
-            _bufferWriter.Append(prefix);
+            _bufferWriter.Append(Prefix);
             SetColor(ContextColor);
-            _bufferWriter.Append(context);
-            _bufferWriter.Append(suffix);
+            _bufferWriter.Append(context.Span);
+            _bufferWriter.Append(Suffix);
             _bufferWriter.Append(' ');
         }
         return this;
@@ -128,18 +129,11 @@ internal sealed class LogColorTextWriter : LogWriter
             switch (token)
             {
                 case TextToken textToken:
-                    _bufferWriter.Append(textToken.Text);
+                    _bufferWriter.Append(textToken.TextBytes.Span);
                     break;
                 case PropertyToken propertyToken:
-                    if (propertys.Length == 0)
-                    {
-                        _bufferWriter.Append(propertyToken.RawText.Text);
-                    }
-                    else
-                    {
-                        RenderPropertyToken(propertyToken, propertys, i);
-                        i++;
-                    }
+                    RenderPropertyToken(propertyToken, propertys, i);
+                    i++;
                     break;
             }
         }
@@ -152,7 +146,7 @@ internal sealed class LogColorTextWriter : LogWriter
         {
             _bufferWriter.AppendLine();
             SetColor(ConsoleColor.Red);
-            _bufferWriter.Append(exception);
+            _bufferWriter.Append(exception.ToString()); // Explicit ToString to ensure Append(string) is called
             _bufferWriter.Append(AnsiReset);
         }
         return this;
@@ -161,12 +155,10 @@ internal sealed class LogColorTextWriter : LogWriter
     // ========================================
     #endregion
 
-
-
     #region 辅助方法
     // ================ 辅助方法 ================
 
-    private void RenderPropertyToken(PropertyToken propertyToken, object?[] propertys, int i)
+    protected override void RenderPropertyToken(PropertyToken propertyToken, object?[] propertys, int i)
     {
         try
         {
@@ -176,14 +168,14 @@ internal sealed class LogColorTextWriter : LogWriter
             if (!found)
             {
                 // 如果找不到对应的参数，输出原始文本
-                _bufferWriter.Append(propertyToken.RawText.Text);
+                _bufferWriter.Append(propertyToken.RawText.TextBytes.Span);
                 return;
             }
 
             if (value is null)
             {
                 SetValueColor(value);
-                _bufferWriter.Append("null");
+                _bufferWriter.Append("null"u8);
                 _bufferWriter.Append(AnsiReset);
                 return;
             }
@@ -191,89 +183,59 @@ internal sealed class LogColorTextWriter : LogWriter
             // 当具有解构标识或设置了默认解构(且是集合类型)时, 尝试解构对象且跳过对齐和格式化(对json格式无意义)
             if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
             {
-                SetValueColor(value);
-                // 当遇到 {@...} 时，使用 JsonSerializer 把它变成一个易读的 JSON 字符串
-                _bufferWriter.Append(TrySerializeToJson(value) ?? value.ToString() ?? "null");
-                _bufferWriter.Append(AnsiReset);
+                // 当遇到 {@...} 时，使用 JsonSerializer 序列化 JSON 字符串
+                if (value is IDestructurable destructurable)
+                {
+                    DestructureHelper destructureHelper = new DestructureHelper(_bufferWriter, false, _serializerWriter, true);
+                    destructurable.Destructure(destructureHelper);
+
+                    if (destructureHelper.TryFlush())
+                    {
+                        _bufferWriter.Append(destructureHelper.WrittenSpan);
+                    }
+
+                    destructureHelper.Dispose(false, true);
+                }
+                else if (value is IDestructured destructured)
+                {
+                    _bufferWriter.Append(destructured.Destructured().Span);
+                }
+                else
+                {
+                    TrySerializeToJson(value);
+                }
+                
                 return; // 处理完就返回, 跳过构建格式字符串
             }
 
+            // 高性能快路径：处理所有数值/时间类型 (IUtf8SpanFormattable)
+            if (value is IUtf8SpanFormattable formattable)
+            {
+                SetValueColor(value);
+                if (!propertyToken.Alignment.HasValue)
+                {
+                    // [极致优化] 无对齐：直接写入 BufferWriter，0 分配
+                    _bufferWriter.AppendFormattable(formattable, propertyToken.Format);
+                }
+                else
+                {
+                    // [极致优化] 有对齐：手动补空格，避免 string.Format 解析开销
+                    WriteAligned(propertyToken.Alignment.Value, formattable, propertyToken.Format);
+                }
+                _bufferWriter.Append(AnsiReset);
+                return;
+            }
+
             // 构建格式字符串，支持对齐和格式化
-            string formatString = BuildFormatString(propertyToken.Alignment, propertyToken.Format);
             SetValueColor(value);
-            _bufferWriter.AppendFormat(formatString, value);
+            _bufferWriter.AppendFormat(propertyToken.FormatString, value);
             _bufferWriter.Append(AnsiReset);
         }
         catch (Exception ex)
         {
-            _bufferWriter.Append(propertyToken.RawText.Text);
-            InternalLogger.Error(ex, $"LogWriter WriteValue Failed: {propertyToken.RawText.Text}");
+            _bufferWriter.Append(propertyToken.RawText.TextBytes.Span);
+            InternalLogger.Error(ex, $"LogWriter WriteValue Failed: {propertyToken.PropertyName}");
         }
-    }
-
-    // 获取属性值
-    private static object? GetPropertyValue(object?[] propertys, int namedIndex, out bool found)
-    {
-        if (namedIndex >= propertys.Length || namedIndex < 0)
-        {
-            found = false;
-            return null;
-        }
-        found = true;
-        return propertys[namedIndex];
-    }
-
-    // 构建格式字符串: {index,alignment:format}
-    private static string BuildFormatString(int? alignment, string? format)
-    {
-        // 如果超长则回退到堆分配
-        // yyyy-MM-dd HH:mm:ss.fff zzz 在格式化中较长的时间格式化, 96个字符也走过容纳前面的例子x3了
-        if (format is not null && format.Length > 96) return BuildFormatStringByHeap(alignment, format);
-        Span<char> buffer = stackalloc char[128];
-        int pos = 0;
-
-        buffer[pos++] = '{';
-        buffer[pos++] = '0';
-
-        if (alignment.HasValue)
-        {
-            buffer[pos++] = ',';
-            alignment.Value.TryFormat(buffer[pos..], out int written);
-            pos += written;
-        }
-
-        if (!string.IsNullOrEmpty(format))
-        {
-            buffer[pos++] = ':';
-            format.AsSpan().CopyTo(buffer[pos..]);
-            pos += format.Length;
-        }
-
-        buffer[pos++] = '}';
-        return new string(buffer[..pos]);
-    }
-
-    // 构建格式字符串: {index,alignment:format}
-    private static string BuildFormatStringByHeap(int? alignment, string? format)
-    {
-        var sb = new StringBuilder("{0");
-
-        // 添加对齐: {0,10} 或 {0,-10}
-        if (alignment.HasValue)
-        {
-            sb.Append(',');
-            sb.Append(alignment.Value);
-        }
-
-        // 添加格式: {0:D} 或 {0,10:D}
-        if (!string.IsNullOrEmpty(format))
-        {
-            sb.Append(':');
-            sb.Append(format);
-        }
-
-        sb.Append('}');
-        return sb.ToString();
     }
 
     /// <summary>
@@ -305,52 +267,52 @@ internal sealed class LogColorTextWriter : LogWriter
     /// </summary>
     /// <param name="color">要转换的 ConsoleColor。</param>
     /// <returns>表示 ANSI 颜色代码的字符串。</returns>
-    private static string ForegroundCode(ConsoleColor color)
+    private static ReadOnlySpan<byte> ForegroundCode(ConsoleColor color)
     {
         return color switch
         {
             // 这是标准的前景色代码
-            ConsoleColor.Black => "30",
-            ConsoleColor.DarkRed => "31",
-            ConsoleColor.DarkGreen => "32",
-            ConsoleColor.DarkYellow => "33",
-            ConsoleColor.DarkBlue => "34",
-            ConsoleColor.DarkMagenta => "35",
-            ConsoleColor.DarkCyan => "36",
-            ConsoleColor.Gray => "37",
-            ConsoleColor.DarkGray => "90",
-            ConsoleColor.Red => "91",
-            ConsoleColor.Green => "92",
-            ConsoleColor.Yellow => "93",
-            ConsoleColor.Blue => "94",
-            ConsoleColor.Magenta => "95",
-            ConsoleColor.Cyan => "96",
-            ConsoleColor.White => "97",
-            _ => "37" // 默认灰色
+            ConsoleColor.Black => "30"u8,
+            ConsoleColor.DarkRed => "31"u8,
+            ConsoleColor.DarkGreen => "32"u8,
+            ConsoleColor.DarkYellow => "33"u8,
+            ConsoleColor.DarkBlue => "34"u8,
+            ConsoleColor.DarkMagenta => "35"u8,
+            ConsoleColor.DarkCyan => "36"u8,
+            ConsoleColor.Gray => "37"u8,
+            ConsoleColor.DarkGray => "90"u8,
+            ConsoleColor.Red => "91"u8,
+            ConsoleColor.Green => "92"u8,
+            ConsoleColor.Yellow => "93"u8,
+            ConsoleColor.Blue => "94"u8,
+            ConsoleColor.Magenta => "95"u8,
+            ConsoleColor.Cyan => "96"u8,
+            ConsoleColor.White => "97"u8,
+            _ => "37"u8 // 默认灰色
         };
     }
     // 背景色映射方法 (背景色代码通常是前景色+10)
-    private static string BackgroundCode(ConsoleColor color)
+    private static ReadOnlySpan<byte> BackgroundCode(ConsoleColor color)
     {
         return color switch
         {
-            ConsoleColor.Black => "40",
-            ConsoleColor.DarkRed => "41",
-            ConsoleColor.DarkGreen => "42",
-            ConsoleColor.DarkYellow => "43",
-            ConsoleColor.DarkBlue => "44",
-            ConsoleColor.DarkMagenta => "45",
-            ConsoleColor.DarkCyan => "46",
-            ConsoleColor.Gray => "47",
-            ConsoleColor.DarkGray => "100",
-            ConsoleColor.Red => "101",
-            ConsoleColor.Green => "102",
-            ConsoleColor.Yellow => "103",
-            ConsoleColor.Blue => "104",
-            ConsoleColor.Magenta => "105",
-            ConsoleColor.Cyan => "106",
-            ConsoleColor.White => "107",
-            _ => "40" // 默认黑色背景
+            ConsoleColor.Black => "40"u8,
+            ConsoleColor.DarkRed => "41"u8,
+            ConsoleColor.DarkGreen => "42"u8,
+            ConsoleColor.DarkYellow => "43"u8,
+            ConsoleColor.DarkBlue => "44"u8,
+            ConsoleColor.DarkMagenta => "45"u8,
+            ConsoleColor.DarkCyan => "46"u8,
+            ConsoleColor.Gray => "47"u8,
+            ConsoleColor.DarkGray => "100"u8,
+            ConsoleColor.Red => "101"u8,
+            ConsoleColor.Green => "102"u8,
+            ConsoleColor.Yellow => "103"u8,
+            ConsoleColor.Blue => "104"u8,
+            ConsoleColor.Magenta => "105"u8,
+            ConsoleColor.Cyan => "106"u8,
+            ConsoleColor.White => "107"u8,
+            _ => "40"u8 // 默认黑色背景
         };
     }
 
@@ -380,7 +342,7 @@ internal sealed class LogColorTextWriter : LogWriter
                     SetColor(BooleanColor);
                     break;
 
-                // ===== 其他常见类型，必须字符串化 =====
+                // ===== 其他常见类型 - 字符串 =====
                 case string:
                 case char:
                 case DateTime:

@@ -47,24 +47,44 @@ internal static class LogParser
 {
     internal static MessageTemplate EmptyMessageTemplate = new([]);
     private const int CacheMaxCountLimit = 4096;
+    private static int _cacheCount = 0;
 
     private static readonly ConcurrentDictionary<string, MessageTemplate> _templateCache = new();
 
     internal static MessageTemplate ParseMessage(string message)
     {
+        // 返回空模板
+        if (message is null || message.Length == 0) return EmptyMessageTemplate;
+
+        // 如果命中缓存, 不解析, 直接返回
+        if (_templateCache.TryGetValue(message, out var cachedResult))
+            return cachedResult;
+
         try
         {
-            // 返回空模板
-            if (message is null || message.Length == 0) return EmptyMessageTemplate;
-            // 如果命中缓存, 不解析, 直接返回
-            if (_templateCache.TryGetValue(message, out var cachedResult))
-                return cachedResult;
             // 解析
             var result = Parser(message);
-            // 写入缓存, 如果到达上限, 直接清空再写入
-            if (_templateCache.Count == CacheMaxCountLimit) _templateCache.Clear();
-            _templateCache[message] = result;
-            return result;
+
+            // 缓存策略：使用 GetOrAdd 避免并发解析时产生的重复实例写入
+            // 虽然 Parser 运行了，但我们只存入字典中最终胜出的那个
+            var finalResult = _templateCache.GetOrAdd(message, result);
+
+            // 计数与清理逻辑
+            // 如果是新插入的（即 finalResult 和刚才解析出的 result 是同一个对象）
+            if (ReferenceEquals(finalResult, result))
+            {
+                var currentCount = Interlocked.Increment(ref _cacheCount);
+                
+                if (currentCount >= CacheMaxCountLimit)
+                {
+                    // 原子性地将计数器重置为 0，且只有一个线程能拿到当时的旧值 >= Limit
+                    if (Interlocked.Exchange(ref _cacheCount, 0) >= CacheMaxCountLimit)
+                    {
+                        _templateCache.Clear();
+                    }
+                }
+            }
+            return finalResult;
         }
         catch (Exception ex)
         {

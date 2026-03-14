@@ -22,6 +22,8 @@ public class LogWriterBenchmarks
     private LogEntry _entrySingleProp = null!;
     private LogEntry _entryMultiProp = null!;
     private LogEntry _entryWithFormatAlign = null!;
+    private LogEntry _entryNumeric = null!;
+    private LogEntry _entryComplex = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -35,7 +37,9 @@ public class LogWriterBenchmarks
             logLevel: LogLevel.Info,
             message: "Application started successfully",
             properties: Array.Empty<object?>(),
-            context: "",
+            context: "Bench",
+            contextBytes: "Bench"u8.ToArray(),
+            scope: "",
             messageTemplate: LogParser.ParseMessage("Application started successfully"));
 
         _entrySingleProp = new LogEntry(
@@ -45,6 +49,8 @@ public class LogWriterBenchmarks
             message: "User {Name} logged in",
             properties: new object?[] { "Alice" },
             context: "Auth.Service",
+            contextBytes: "Auth.Service"u8.ToArray(),
+            scope: "",
             messageTemplate: LogParser.ParseMessage("User {Name} logged in"));
 
         _entryMultiProp = new LogEntry(
@@ -54,6 +60,8 @@ public class LogWriterBenchmarks
             message: "Request {Method} {Url} completed in {Duration}ms with status {Status}",
             properties: new object?[] { "GET", "/api/users", 42, 200 },
             context: "Http.Middleware",
+            contextBytes: "Http.Middleware"u8.ToArray(),
+            scope: "",
             messageTemplate: LogParser.ParseMessage("Request {Method} {Url} completed in {Duration}ms with status {Status}"));
 
         _entryWithFormatAlign = new LogEntry(
@@ -63,7 +71,31 @@ public class LogWriterBenchmarks
             message: "{Count,8:D} items processed, {Percent:P1} complete",
             properties: new object?[] { 12345, 0.8765 },
             context: "Worker",
+            contextBytes: "Worker"u8.ToArray(),
+            scope: "",
             messageTemplate: LogParser.ParseMessage("{Count,8:D} items processed, {Percent:P1} complete"));
+
+        _entryNumeric = new LogEntry(
+            loggerName: "Bench",
+            timestamp: ts,
+            logLevel: LogLevel.Info,
+            message: "Process {Id} at {Time} spent {Duration}",
+            properties: new object?[] { 12345, ts, TimeSpan.FromMilliseconds(420) },
+            context: "System",
+            contextBytes: "System"u8.ToArray(),
+            scope: "",
+            messageTemplate: LogParser.ParseMessage("Process {Id} at {Time} spent {Duration}"));
+
+        _entryComplex = new LogEntry(
+            loggerName: "Bench",
+            timestamp: ts,
+            logLevel: LogLevel.Info,
+            message: "Request context: {@Payload}",
+            properties: new object?[] { new { Id = 1, Name = "Test", Tags = new[] { "tag1", "tag2" } } },
+            context: "API",
+            contextBytes: "API"u8.ToArray(),
+            scope: "",
+            messageTemplate: LogParser.ParseMessage("Request context: {@Payload}"));
     }
 
     // ==================== LogTextWriter ====================
@@ -100,6 +132,14 @@ public class LogWriterBenchmarks
         finally { w.Return(); }
     }
 
+    [Benchmark(Description = "Text: Numeric/Formattable (int, DateTimeOffset, TimeSpan)")]
+    public void Text_Numeric()
+    {
+        var w = WriterPool.Get<LogTextWriter>();
+        try { w.Render(_entryNumeric); w.FlushTo(Stream.Null); }
+        finally { w.Return(); }
+    }
+
     // ==================== LogColorTextWriter ====================
 
     [Benchmark(Description = "Color: 单属性（含 ANSI 颜色转义代码）")]
@@ -133,6 +173,22 @@ public class LogWriterBenchmarks
     {
         var w = WriterPool.Get<LogJsonWriter>();
         try { w.Render(_entryMultiProp); w.FlushTo(Stream.Null); }
+        finally { w.Return(); }
+    }
+
+    [Benchmark(Description = "JSON: Numeric/Formattable")]
+    public void Json_Numeric()
+    {
+        var w = WriterPool.Get<LogJsonWriter>();
+        try { w.Render(_entryNumeric); w.FlushTo(Stream.Null); }
+        finally { w.Return(); }
+    }
+
+    [Benchmark(Description = "JSON: Complex Object (@Destructure)")]
+    public void Json_ComplexObject()
+    {
+        var w = WriterPool.Get<LogJsonWriter>();
+        try { w.Render(_entryComplex); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 

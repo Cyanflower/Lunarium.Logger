@@ -20,7 +20,7 @@ namespace Lunarium.Logger.Writer;
 
 internal static class WriterPool
 {
-    internal static int MaxBufferCapacity { get; set; } = 4 * 1024;
+    internal static int MaxBufferCapacity { get; set; } = 32 * 1024;
 
     internal static T Get<T>() where T : LogWriter, new()
     {
@@ -37,7 +37,7 @@ internal static class WriterPool
         // Writer 对象池
         private static readonly ConcurrentBag<T> _pool = new();
         // 池内对象上限
-        private const int PoolMaxSize = 100;
+        private const int PoolMaxSize = 128;
         // 独立原子计数器, 避免 ConcurrentBag.Count 触发全局锁 (FreezeBag)
         private static int _count = 0;
 
@@ -61,10 +61,6 @@ internal static class WriterPool
         internal static void Return(T writer)
         {
             // 池内对象数量是否到达限制
-            // 会有可能的临界时竞态条件, 但考虑到实现简单度, 维护直观, 和性能(比起复杂的多线程锁机制)
-            // 并且明显可以容忍和接受其竞态后果(PoolSize只在某一段的短时间会大于100, 可能是101或102左右)
-            // 且超出之后一旦有对象再被取出就无法回到池内了, 最终池内对象数量会回落到100以下, 不会无限制增长
-            // 这样就可以了
             if (Volatile.Read(ref _count) >= PoolMaxSize)
             {
                 // 直接返回并清理, 不回池内

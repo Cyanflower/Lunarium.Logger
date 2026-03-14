@@ -16,22 +16,33 @@ using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
-using Lunarium.Logger.GlobalConfig;
+using System.Globalization;
 using Lunarium.Logger.Parser;
 
 namespace Lunarium.Logger.Writer;
 
 internal abstract class LogWriter : IDisposable
 {
+    // 主写入器
     protected readonly BufferWriter _bufferWriter;
+
+    // 专用于处理临时缓冲区和序列化, 用于单次方法执行, 严格遵循用处用前重置和用后原地重置
+    protected readonly Utf8JsonWriter _serializerWriter;
     // 状态定义：0 = 使用中 (Active), 1 = 已释放/在池中 (Disposed/InPool)
     // 使用 int 以便进行 Interlocked 操作
     private int _disposedState = 0; 
-    private const int DefaultMaxCapacity = 4 * 1024; // 默认4KB阈值
+    private const int DefaultMaxCapacity = 32 * 1024; // 默认4KB阈值
+    protected static ReadOnlySpan<byte> SpacePool => "                                "u8; // 32个空格, 别查了, 我tm亲手敲的, tmd有没有不这么丑的写法啊
+    
 
     public LogWriter()
     {
         _bufferWriter = new BufferWriter(256);
+        _serializerWriter = new Utf8JsonWriter(Stream.Null, new JsonWriterOptions
+        {
+            Indented = JsonSerializationConfig.Options.WriteIndented,
+            Encoder = JsonSerializationConfig.Options.Encoder
+        });
     }
 
     #region --- 池化管理 API ---
@@ -134,7 +145,8 @@ internal abstract class LogWriter : IDisposable
         BeginEntry();
         WriteTimestamp(logEntry.Timestamp);
         WriteLevel(logEntry.LogLevel);
-        WriteContext(logEntry.Context);
+
+        WriteContext(logEntry.ContextBytes);
 
         // 🎣 钩子：允许子类在渲染消息前插入额外逻辑(如 JSON 的 OriginalMessage)
         BeforeRenderMessage(logEntry);
@@ -188,22 +200,161 @@ internal abstract class LogWriter : IDisposable
 
     #endregion
 
-    #region --- 抽象方法：子类必须实现 ---
+    #region --- 子类必须实现 ---
 
     protected abstract LogWriter WriteTimestamp(DateTimeOffset timestamp);
     protected abstract LogWriter WriteLevel(LogLevel level);
-    protected abstract LogWriter WriteContext(string? context);
+    protected abstract LogWriter WriteContext(ReadOnlyMemory<byte> context);
     protected abstract LogWriter WriteRenderedMessage(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys);
     protected abstract LogWriter WriteException(Exception? exception);
 
     #endregion
 
-    #region --- 钩子方法：子类可选重写 ---
+    #region --- 子类可选重写 ---
 
     protected virtual void BeforeRenderMessage(LogEntry logEntry) { }
     protected virtual void AfterRenderMessage(LogEntry logEntry) { }
     protected virtual LogWriter BeginEntry() { return this; }
     protected virtual LogWriter EndEntry() { return this; }
+
+    protected virtual void RenderPropertyToken(PropertyToken propertyToken, object?[] propertys, int i)
+    {
+        try
+        {
+            // ================
+            // 1. 获取值
+            // ================
+            // 获取要渲染的值
+            object? value = GetPropertyValue(propertys, i, out bool found);
+
+            if (!found)
+            {
+                // 如果找不到对应的参数，输出原始文本
+                _bufferWriter.Append(propertyToken.RawText.TextBytes.Span);
+                return;
+            }
+            // 或值是 null, 直接输出 null (utf8字面量)
+            if (value is null)
+            {
+                _bufferWriter.Append("null"u8);
+                return;
+            }
+
+            // 当具有解构标识或设置了默认解构(且是集合类型)时, 尝试解构对象且跳过对齐和格式化(对json格式无意义)
+            if (propertyToken.Destructuring == Destructuring.Destructure || (DestructuringConfig.AutoDestructureCollections && IsCommonCollectionType(value)))
+            {
+                // 当遇到 {@...} 时，使用 JsonSerializer 序列化 JSON 字符串
+                if (value is IDestructurable destructurable)
+                {
+                    DestructureHelper destructureHelper = new DestructureHelper(_bufferWriter, false, _serializerWriter, true);
+                    destructurable.Destructure(destructureHelper);
+
+                    if (destructureHelper.TryFlush())
+                    {
+                        _bufferWriter.Append(destructureHelper.WrittenSpan);
+                    }
+
+                    destructureHelper.Dispose(false, true);
+                }
+                else if (value is IDestructured destructured)
+                {
+                    _bufferWriter.Append(destructured.Destructured().Span);
+                }
+                else
+                {
+                    TrySerializeToJson(value);
+                }
+                
+                return; // 处理完就返回, 跳过构建格式字符串, Json不能使用对齐和格式化
+            }
+
+            // 高性能快路径：处理所有数值/时间类型 (IUtf8SpanFormattable)
+            if (value is IUtf8SpanFormattable formattable)
+            {
+                if (!propertyToken.Alignment.HasValue)
+                {
+                    // [极致优化] 无对齐：直接写入 BufferWriter，0 分配
+                    _bufferWriter.AppendFormattable(formattable, propertyToken.Format);
+                    return;
+                }
+                else
+                {
+                    // [极致优化] 有对齐：手动补空格，避免 string.Format 解析开销
+                    WriteAligned(propertyToken.Alignment.Value, formattable, propertyToken.Format);
+                    return;
+                }
+            }
+
+            // 构建格式字符串，支持对齐和格式化
+            _bufferWriter.AppendFormat(propertyToken.FormatString, value);
+        }
+        catch (Exception ex)
+        {
+            _bufferWriter.Append(propertyToken.RawText.TextBytes.Span);
+            InternalLogger.Error(ex, $"LogWriter WriteValue Failed: {propertyToken.PropertyName}");
+        }
+    }
+
+    // 获取属性值
+    protected virtual object? GetPropertyValue(object?[] propertys, int namedIndex, out bool found)
+    {
+        if (namedIndex >= propertys.Length || namedIndex < 0)
+        {
+            found = false;
+            return null;
+        }
+        found = true;
+        return propertys[namedIndex];
+    }
+
+    protected virtual void WriteAligned(int alignment, IUtf8SpanFormattable content, string? format)
+    {
+        Span<byte> temp = stackalloc byte[128];
+
+        // 尝试格式化
+        if (content.TryFormat(temp, out int written, format, CultureInfo.InvariantCulture))
+        {
+            // 计算需要的空格数
+            int padding = Math.Abs(alignment) - written;
+            // 如果内容已经超过或等于对齐宽度，直接写内容
+            if (padding <= 0)
+            {
+                _bufferWriter.Append(temp[..written]);
+                return;
+            }
+            // 3. 根据正负值处理左/右对齐
+            if (alignment > 0) // 右对齐: [  123]
+            {
+                AppendPadding(padding);
+                _bufferWriter.Append(temp[..written]);
+            }
+            else // 左对齐: [123  ]
+            {
+                _bufferWriter.Append(temp[..written]);
+                AppendPadding(padding);
+            }
+        }
+        else
+        {
+            // 极小概率失败（如格式符极其复杂），回退到通用路径或直接输出
+            _bufferWriter.AppendFormattable(content, format);
+        }
+    }
+
+    protected virtual void AppendPadding(int count)
+    {
+        // 如果需要的空格在池子范围内，直接 MemoryCopy
+        if (count <= SpacePool.Length)
+        {
+            _bufferWriter.Append(SpacePool[..count]);
+        }
+        else
+        {
+            // 超过池子范围再回退到 Fill
+            _bufferWriter.GetSpan(count)[..count].Fill((byte)' ');
+            _bufferWriter.Advance(count);
+        }
+    }
 
     #endregion
 
@@ -219,10 +370,25 @@ internal abstract class LogWriter : IDisposable
                         "AOT users can register a JsonTypeInfoResolver via GlobalConfigurator.UseJsonTypeInfoResolver().")]
     [UnconditionalSuppressMessage("AOT", "IL3050",
         Justification = "Same as IL2026.")]
-    protected static string? TrySerializeToJson(object? value)
+    protected void TrySerializeToJson(object? value)
     {
-        try { return JsonSerializer.Serialize(value, JsonSerializationConfig.Options); }
-        catch { return null; }
+        var index = _bufferWriter.WrittenCount;
+        // 无论如何进入时都重置 jsonWriter 并重新绑定 bufferWriter
+        _serializerWriter.Reset(_bufferWriter);
+        try 
+        { 
+            JsonSerializer.Serialize(_serializerWriter, value, JsonSerializationConfig.Options); 
+            _serializerWriter.Flush();
+        }
+        catch (Exception ex) 
+        {
+            _bufferWriter.Rewind(index); // 回退到序列化前的状态，丢弃任何部分写入的内容
+            InternalLogger.Error(ex, "LogWriter TrySerializeToJson Failed"); 
+        }
+        finally
+        {
+            _serializerWriter.Reset(Stream.Null);
+        }
     }
 
     #endregion
@@ -250,16 +416,16 @@ internal abstract class LogWriter : IDisposable
     }
     #endregion
 
-    /// <summary>
-    /// 析构函数：确保 ArrayPool 资源不泄漏
-    /// </summary>
-    ~LogWriter()
-    {
-        // 万一用户忘了写 using，对象被 GC 时也要把数组还回去
-        // 否则 ArrayPool 会随着时间推移被耗尽
-        if (_bufferWriter != null)
-        {
-            DisposeAndReturnArrayBuffer();
-        }
-    }
+    // /// <summary>
+    // /// 析构函数：确保 ArrayPool 资源不泄漏
+    // /// </summary>
+    // ~LogWriter()
+    // {
+    //     // 万一用户忘了写 using，对象被 GC 时也要把数组还回去
+    //     // 否则 ArrayPool 会随着时间推移被耗尽
+    //     if (_bufferWriter != null)
+    //     {
+    //         DisposeAndReturnArrayBuffer();
+    //     }
+    // }
 }
