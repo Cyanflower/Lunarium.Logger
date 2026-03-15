@@ -60,7 +60,7 @@ public class GlobalConfiguratorTests
         _customResolverField?.SetValue(null, null);
         _optionsField?.SetValue(null, null);
         // Reset JsonSerializationConfig to defaults
-        JsonSerializationConfig.ConfigPreserveChineseCharacters(true);
+        JsonSerializationConfig.ConfigUnsafeRelaxedJsonEscaping(true);
         JsonSerializationConfig.ConfigWriteIndented(false);
     }
 
@@ -313,7 +313,7 @@ public class GlobalConfiguratorTests
     public void PreserveChineseCharacters_ConfiguresNonEscapedChinese()
     {
         ResetAll();
-        GlobalConfigurator.Configure().PreserveChineseCharacters().Apply();
+        GlobalConfigurator.Configure().EnableUnsafeRelaxedJsonEscaping().Apply();
         JsonSerializationConfig.Options.Should().NotBeNull();
         ResetAll();
     }
@@ -322,7 +322,7 @@ public class GlobalConfiguratorTests
     public void EscapeChineseCharacters_CanBeChained()
     {
         ResetAll();
-        Action act = () => GlobalConfigurator.Configure().EscapeChineseCharacters().Apply();
+        Action act = () => GlobalConfigurator.Configure().DisableUnsafeRelaxedJsonEscaping().Apply();
         act.Should().NotThrow();
         ResetAll();
     }

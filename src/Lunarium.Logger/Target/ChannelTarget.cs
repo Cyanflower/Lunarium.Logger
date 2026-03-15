@@ -49,15 +49,17 @@ public abstract class ChannelTarget<T> : ILogTarget, IDisposable
 /// ⚠️ 性能提示：每次 Emit 会产生一次 string 堆分配（UTF-8 解码为 UTF-16）。
 /// 若消费者直接写网络/文件，建议改用 <see cref="ByteChannelTarget"/>。
 /// </summary>
-public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
+public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget, ITextTarget
 {
-    private readonly bool _isColor;
     public bool ToJson { get; set; } = false;
+    
+    public bool IsColor { get; set; } = false;
+    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
 
     public StringChannelTarget(ChannelWriter<string> writer, bool isColor)
         : base(writer)
     {
-        _isColor = isColor;
+        IsColor = isColor;
     }
 
     protected override string Transform(LogEntry entry)
@@ -71,12 +73,19 @@ public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
         //           否 -> LogTextWriter
         LogWriter logWriter = ToJson
             ? WriterPool.Get<LogJsonWriter>()
-            : _isColor
+            : IsColor
                 ? WriterPool.Get<LogColorTextWriter>()
                 : WriterPool.Get<LogTextWriter>();
         try
         {
-            logWriter.Render(entry);
+            if (logWriter is ITextTarget textTarget)
+            {
+                logWriter.Render(entry, TextOutputIncludeConfig);
+            }
+            else
+            {
+                logWriter.Render(entry);
+            }
             return logWriter.ToString();
         }
         finally
@@ -92,22 +101,23 @@ public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
 /// 适合消费者直接进行网络传输或文件写入的场景。
 /// ⚠️ 性能提示：每次 Emit 仍会产生一次 byte[] 堆分配（ToArray()）。
 /// </summary>
-public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
+public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget, ITextTarget
 {
-    private readonly bool _isColor;
     public bool ToJson { get; set; } = false;
+    public bool IsColor { get; set; } = false;
+    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
 
     public ByteChannelTarget(ChannelWriter<byte[]> writer, bool isColor)
         : base(writer)
     {
-        _isColor = isColor;
+        IsColor = isColor;
     }
 
     protected override byte[] Transform(LogEntry entry)
     {
         LogWriter logWriter = ToJson
             ? WriterPool.Get<LogJsonWriter>()
-            : _isColor
+            : IsColor
                 ? WriterPool.Get<LogColorTextWriter>()
                 : WriterPool.Get<LogTextWriter>();
         try

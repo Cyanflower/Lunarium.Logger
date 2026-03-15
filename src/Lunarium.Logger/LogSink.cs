@@ -76,9 +76,16 @@ internal readonly record struct Sink
         {
             jsonSink.ToJson = Configuration.ToJson.Value;
         }
-        if (Target is IColorTextTarget colorSink && Configuration.IsColor is not null)
+        if (Target is ITextTarget colorSink)
         {
-            colorSink.IsColor = Configuration.IsColor.Value;
+            if (Configuration.IsColor is not null)
+            {
+                colorSink.IsColor = Configuration.IsColor.Value;
+            }
+            if (Configuration.TextOutputIncludeConfig is not null)
+            {
+                colorSink.TextOutputIncludeConfig = Configuration.TextOutputIncludeConfig;
+            }
         }
     }
 }

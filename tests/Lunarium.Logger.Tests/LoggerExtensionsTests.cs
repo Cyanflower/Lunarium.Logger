@@ -78,7 +78,62 @@ public class LoggerExtensionsTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 3. LoggerBuilderExtensions.AddConsoleSink
+    // 3. LoggerBuilderExtensions.AddFileSink
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task AddFileSink_ReturnsSameBuilder()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lunarium-file-{Guid.NewGuid():N}.log");
+        var builder = new LoggerBuilder();
+        var returned = builder.AddFileSink(path);
+        returned.Should().BeSameAs(builder);
+        await builder.Build().DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AddFileSink_WithSinkOutputConfig_ReturnsSameBuilder()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lunarium-file-{Guid.NewGuid():N}.log");
+        var builder = new LoggerBuilder();
+        var cfg = new SinkOutputConfig { LogMinLevel = LogLevel.Warning };
+        var returned = builder.AddFileSink(path, cfg);
+        returned.Should().BeSameAs(builder);
+        await builder.Build().DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AddFileSink_BuildAndLog_WritesToFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lunarium-file-{Guid.NewGuid():N}.log");
+        try
+        {
+            var logger = new LoggerBuilder()
+                .AddFileSink(path)
+                .Build();
+            logger.Info("hello from file");
+            await logger.DisposeAsync(); // flush
+            File.Exists(path).Should().BeTrue();
+            File.ReadAllText(path).Should().Contain("hello from file");
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public async Task AddFileSink_NullConfig_DoesNotThrow()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lunarium-file-{Guid.NewGuid():N}.log");
+        var builder = new LoggerBuilder();
+        Action act = () => builder.AddFileSink(path, sinkOutputConfig: null);
+        act.Should().NotThrow();
+        await builder.Build().DisposeAsync();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3b. LoggerBuilderExtensions.AddConsoleSink
     // ─────────────────────────────────────────────────────────────────────────
 
     [Fact]

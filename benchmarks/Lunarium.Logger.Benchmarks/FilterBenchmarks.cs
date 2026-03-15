@@ -61,6 +61,7 @@ public class FilterBenchmarks
             var ctx = $"Service.Component.Module_{i:D4}";
             _uniqueEntries[i] = new LogEntry(
                 loggerName: "Bench",
+                loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
                 timestamp: ts,
                 logLevel: LogLevel.Info,
                 message: "test",
@@ -96,6 +97,7 @@ public class FilterBenchmarks
 
         _entryMatchingContext = new LogEntry(
             loggerName: "Bench",
+                loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "test",
@@ -107,6 +109,7 @@ public class FilterBenchmarks
 
         _entryNonMatchingContext = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "test",

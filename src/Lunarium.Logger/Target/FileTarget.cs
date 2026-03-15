@@ -24,7 +24,7 @@ namespace Lunarium.Logger.Target;
 /// 两种轮转策略可独立启用，也可同时启用（任一条件触发即轮转）。
 /// Writer 层渲染的 UTF-8 字节直接写入 FileStream，无 StreamWriter 中间缓冲。
 /// </summary>
-public sealed class FileTarget : ILogTarget, IJsonTextTarget
+public sealed class FileTarget : ILogTarget, IJsonTextTarget, ITextTarget
 {
     // 进程级路径追踪：防止不同 Logger 的 FileTarget 写入同一文件
     private static readonly ConcurrentDictionary<string, byte> _activePaths =
@@ -44,6 +44,8 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
 
     // === 日志配置 ===
     public bool ToJson { get; set; } = false;
+    public bool IsColor { get; set; } = false;
+    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
     private readonly string _logFilePath;
     // 单个文件的最大字节数，-1 表示不限制
     private readonly long _maxFileSize;
@@ -145,7 +147,14 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
         try
         {
             using LogWriter logWriter = ToJson ? WriterPool.Get<LogJsonWriter>() : WriterPool.Get<LogTextWriter>();
-            logWriter.Render(entry);
+            if (logWriter is ITextTarget textTarget)
+            {
+                logWriter.Render(entry, TextOutputIncludeConfig);
+            }
+            else
+            {
+                logWriter.Render(entry);
+            }
 
             lock (_lock)
             {

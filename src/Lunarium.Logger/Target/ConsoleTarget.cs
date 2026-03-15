@@ -22,7 +22,7 @@ namespace Lunarium.Logger.Target;
 /// 它支持纯文本和 JSON 两种输出模式，并对结构化数据进行智能染色。
 /// 输出通过底层字节流写入，避免 char→byte 中间转换。
 /// </summary>
-public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarget
+public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, ITextTarget
 {
     // 线程安全锁，以防止多条日志消息的输出在控制台中交错
     private readonly Lock _lock = new();
@@ -33,6 +33,8 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
 
     public bool ToJson { get; set; } = false;
     public bool IsColor { get; set; } = true;
+
+    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
 
     public ConsoleTarget()
     {
@@ -71,7 +73,14 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
         try
         {
             // 渲染日志
-            logWriter.Render(entry);
+            if (logWriter is ITextTarget textTarget)
+            {
+                logWriter.Render(entry, TextOutputIncludeConfig);
+            }
+            else
+            {
+                logWriter.Render(entry);
+            }
 
             // 选择输出流
             Stream output = entry.LogLevel >= LogLevel.Error ? _stderr : _stdout;

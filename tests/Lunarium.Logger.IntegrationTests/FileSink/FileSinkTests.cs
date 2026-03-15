@@ -61,6 +61,7 @@ public class FileTargetTests : IDisposable
     {
         return new LogEntry(
             loggerName: "FileScope",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("FileScope"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: message,
@@ -140,6 +141,7 @@ public class FileTargetTests : IDisposable
         var yesterday = DateTimeOffset.UtcNow.AddDays(-1);
         var entry1 = new LogEntry(
             loggerName: "FileScope",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("FileScope"),
             timestamp: yesterday,
             logLevel: LogLevel.Error,
             message: "Day 1",
@@ -315,6 +317,7 @@ public class FileTargetTests : IDisposable
             var ts = baseTime.AddDays(i);
             var entry = new LogEntry(
                 loggerName: "FileScope",
+                loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("FileScope"),
                 timestamp: ts,
                 logLevel: LogLevel.Error,
                 message: $"day {i}",

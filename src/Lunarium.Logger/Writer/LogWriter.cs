@@ -30,10 +30,10 @@ internal abstract class LogWriter : IDisposable
     protected readonly Utf8JsonWriter _serializerWriter;
     // 状态定义：0 = 使用中 (Active), 1 = 已释放/在池中 (Disposed/InPool)
     // 使用 int 以便进行 Interlocked 操作
-    private int _disposedState = 0; 
+    private int _disposedState = 0;
     private const int DefaultMaxCapacity = 32 * 1024; // 默认4KB阈值
     protected static ReadOnlySpan<byte> SpacePool => "                                "u8; // 32个空格, 别查了, 我tm亲手敲的, tmd有没有不这么丑的写法啊
-    
+
 
     public LogWriter()
     {
@@ -96,9 +96,9 @@ internal abstract class LogWriter : IDisposable
     public void Dispose()
     {
         // 原子检查并设置：如果当前是 0，则设为 1；如果当前已经是 1，说明已归还，直接返回
-        if (Interlocked.CompareExchange(ref _disposedState, 1, 0) != 0) 
+        if (Interlocked.CompareExchange(ref _disposedState, 1, 0) != 0)
         {
-            return; 
+            return;
         }
 
         // 只有抢到“从 0 变 1”权利的线程才能执行归还逻辑
@@ -113,7 +113,7 @@ internal abstract class LogWriter : IDisposable
     /// </summary>
     internal void DisposeAndReturnArrayBuffer()
     {
-        try 
+        try
         {
             // 增加对环境状态的判断：如果进程正在关闭，归还 ArrayPool 可能不再安全或不再必要
             if (Environment.HasShutdownStarted) return;
@@ -140,13 +140,52 @@ internal abstract class LogWriter : IDisposable
     /// <summary>
     /// 渲染日志条目到内部缓冲区
     /// </summary>
+    internal void Render(LogEntry logEntry, TextOutputIncludeConfig config)
+    {
+        BeginEntry();
+
+        if (config.IncludeTimestamp)
+        {
+            WriteTimestamp(logEntry.Timestamp);
+        }
+
+        if (config.IncludeLevel)
+        {
+            WriteLevel(logEntry.LogLevel);
+        }
+
+        if (config.IncludeLoggerName)
+        {
+            WriteLoggerName(logEntry.LoggerNameBytes);
+        }
+
+        if (config.IncludeContext)
+        {
+            WriteContext(logEntry.ContextBytes);
+        }
+
+        // 🎣 钩子：允许子类在渲染消息前插入额外逻辑(如 JSON 的 OriginalMessage)
+        BeforeRenderMessage(logEntry);
+
+        WriteRenderedMessage(logEntry.MessageTemplate.MessageTemplateTokens, logEntry.Properties);
+
+        // 🎣 钩子：允许子类在渲染消息后插入额外逻辑(如 JSON 的 PropertyValue)
+        AfterRenderMessage(logEntry);
+
+        WriteException(logEntry.Exception);
+        EndEntry();
+
+        _bufferWriter.AppendLine();
+    }
+
     internal void Render(LogEntry logEntry)
     {
         BeginEntry();
+
         WriteTimestamp(logEntry.Timestamp);
         WriteLevel(logEntry.LogLevel);
-
         WriteContext(logEntry.ContextBytes);
+        WriteLoggerName(logEntry.LoggerNameBytes);
 
         // 🎣 钩子：允许子类在渲染消息前插入额外逻辑(如 JSON 的 OriginalMessage)
         BeforeRenderMessage(logEntry);
@@ -204,6 +243,7 @@ internal abstract class LogWriter : IDisposable
 
     protected abstract LogWriter WriteTimestamp(DateTimeOffset timestamp);
     protected abstract LogWriter WriteLevel(LogLevel level);
+    protected abstract LogWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName);
     protected abstract LogWriter WriteContext(ReadOnlyMemory<byte> context);
     protected abstract LogWriter WriteRenderedMessage(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys);
     protected abstract LogWriter WriteException(Exception? exception);
@@ -264,7 +304,7 @@ internal abstract class LogWriter : IDisposable
                 {
                     TrySerializeToJson(value);
                 }
-                
+
                 return; // 处理完就返回, 跳过构建格式字符串, Json不能使用对齐和格式化
             }
 
@@ -379,15 +419,15 @@ internal abstract class LogWriter : IDisposable
         var index = _bufferWriter.WrittenCount;
         // 无论如何进入时都重置 jsonWriter 并重新绑定 bufferWriter
         _serializerWriter.Reset(_bufferWriter);
-        try 
-        { 
-            JsonSerializer.Serialize(_serializerWriter, value, JsonSerializationConfig.Options); 
+        try
+        {
+            JsonSerializer.Serialize(_serializerWriter, value, JsonSerializationConfig.Options);
             _serializerWriter.Flush();
         }
-        catch (Exception ex) 
+        catch (Exception ex)
         {
             _bufferWriter.Rewind(index); // 回退到序列化前的状态，丢弃任何部分写入的内容
-            InternalLogger.Error(ex, "LogWriter TrySerializeToJson Failed"); 
+            InternalLogger.Error(ex, "LogWriter TrySerializeToJson Failed");
         }
         finally
         {

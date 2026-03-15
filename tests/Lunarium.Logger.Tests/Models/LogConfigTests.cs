@@ -178,7 +178,7 @@ public class LogConfigTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 5. Sink.SetJsonSinkProperty — IsColor path (IColorTextTarget)
+    // 5. Sink.SetJsonSinkProperty — IsColor/TextOutputIncludeConfig path (ITextTarget)
     // ─────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -209,14 +209,33 @@ public class LogConfigTests
     }
 
     [Fact]
-    public void Sink_SetJsonSinkProperty_TargetNotIColorTextTarget_DoesNotThrow()
+    public void Sink_SetJsonSinkProperty_TargetNotITextTarget_DoesNotThrow()
     {
-        var ch = Channel.CreateUnbounded<string>();
-        var target = new StringChannelTarget(ch.Writer, isColor: false);
+        // Substitute.For<ILogTarget>() does not implement ITextTarget
+        var target = Substitute.For<ILogTarget>();
         var cfg = new SinkOutputConfig { IsColor = true };
         Action act = () => _ = new Sink(target, cfg);
         act.Should().NotThrow();
-        target.Should().NotBeAssignableTo<IColorTextTarget>();
+    }
+
+    [Fact]
+    public void Sink_SetJsonSinkProperty_WithTextOutputIncludeConfig_SetsOnTarget()
+    {
+        var target = new ConsoleTarget();
+        var customConfig = new TextOutputIncludeConfig { IncludeLoggerName = false, IncludeTimestamp = true };
+        var cfg = new SinkOutputConfig { TextOutputIncludeConfig = customConfig };
+        _ = new Sink(target, cfg);
+        target.TextOutputIncludeConfig.IncludeLoggerName.Should().BeFalse();
+        target.TextOutputIncludeConfig.IncludeTimestamp.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Sink_SetJsonSinkProperty_WithTextOutputIncludeConfigNull_DoesNotModifyTarget()
+    {
+        var target = new ConsoleTarget(); // default TextOutputIncludeConfig has all true
+        var cfg = new SinkOutputConfig { TextOutputIncludeConfig = null };
+        _ = new Sink(target, cfg);
+        target.TextOutputIncludeConfig.IncludeLoggerName.Should().BeTrue(); // unchanged
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -226,6 +245,7 @@ public class LogConfigTests
     private static LogEntry MakeLogEntry(LogLevel level = LogLevel.Info, string msg = "hello")
         => new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: msg,

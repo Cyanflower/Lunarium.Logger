@@ -57,6 +57,7 @@ public class LogWriterBenchmarks
 
         _entryPlainText = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "Application started successfully",
@@ -68,6 +69,7 @@ public class LogWriterBenchmarks
 
         _entrySingleProp = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "User {Name} logged in",
@@ -79,6 +81,7 @@ public class LogWriterBenchmarks
 
         _entryMultiProp = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "Request {Method} {Url} completed in {Duration}ms with status {Status}",
@@ -90,6 +93,7 @@ public class LogWriterBenchmarks
 
         _entryWithFormatAlign = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Warning,
             message: "{Count,8:D} items processed, {Percent:P1} complete",
@@ -101,6 +105,7 @@ public class LogWriterBenchmarks
 
         _entryNumeric = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "Process {Id} at {Time} spent {Duration}",
@@ -112,6 +117,7 @@ public class LogWriterBenchmarks
 
         _entryComplex = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "Request context: {@Payload}",
@@ -123,6 +129,7 @@ public class LogWriterBenchmarks
 
         _entryIDestructured = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "Request context: {@Payload}",

@@ -37,6 +37,22 @@ public static class LoggerBuilderExtensions
     }
 
     /// <summary>
+    /// 为日志构建器添加一个文件输出目标 (Sink)，将日志写入指定路径的文件中。
+    /// 如果文件不存在会自动创建，日志会追加到现有文件末尾。
+    /// </summary>
+    /// <param name="builder">要配置的 LoggerBuilder 实例。</param>
+    /// <param name="logFilePath">日志文件的路径。</param>
+    /// <param name="sinkOutputConfig">输出配置。</param>
+    /// <returns>返回配置后的 LoggerBuilder 实例，以便进行链式调用。</returns>
+    public static LoggerBuilder AddFileSink(
+        this LoggerBuilder builder,
+        string logFilePath,
+        SinkOutputConfig? sinkOutputConfig = null)
+    {
+        return builder.AddSink(target: new FileTarget(logFilePath), cfg: sinkOutputConfig);
+    }
+
+    /// <summary>
     /// 为日志构建器添加一个按时间轮转的文件输出目标 (Sink)。
     /// 每天会生成一个新的日志文件。
     /// </summary>
@@ -95,9 +111,9 @@ public static class LoggerBuilderExtensions
     /// <returns>返回配置后的 LoggerBuilder 实例，以便进行链式调用。</returns>
     public static LoggerBuilder AddRotatingFileSink(
         this LoggerBuilder builder, string logFilePath,
-        double maxFileSizeMB = 0,
-        bool rotateOnNewDay = false,
-        int maxFile = 0,
+        double maxFileSizeMB = 10,
+        bool rotateOnNewDay = true,
+        int maxFile = 10,
         SinkOutputConfig? sinkOutputConfig = null)
     {
         return builder.AddSink(

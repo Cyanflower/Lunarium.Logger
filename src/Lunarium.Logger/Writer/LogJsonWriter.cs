@@ -123,6 +123,12 @@ internal sealed class LogJsonWriter : LogWriter
         return this;
     }
 
+    protected override LogWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName)
+    {
+        _jsonWriter.WriteString("LoggerName", loggerName.Span);
+        return this;
+    }
+
     protected override LogWriter WriteLevel(LogLevel level)
     {
         _jsonWriter.WritePropertyName(LevelKey);

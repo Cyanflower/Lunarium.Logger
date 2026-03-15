@@ -58,6 +58,7 @@ public class ChannelTargetBenchmarks
         var ts = DateTimeOffset.UtcNow;
         _entry = new LogEntry(
             loggerName: "Bench",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
             timestamp: ts,
             logLevel: LogLevel.Info,
             message: "User {Name} logged in",

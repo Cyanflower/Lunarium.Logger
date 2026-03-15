@@ -27,6 +27,7 @@ public class ChannelTargetTests
     private static LogEntry MakeEntry(string msg = "hello") =>
         new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: LogLevel.Info,
             message: msg,
@@ -83,5 +84,31 @@ public class ChannelTargetTests
         var target = new StringChannelTarget(channel.Writer, isColor: false);
         target.ToJson = true;
         target.ToJson.Should().BeTrue();
+    }
+
+    [Fact]
+    public void StringChannelTarget_ImplementsITextTarget()
+    {
+        var channel = Channel.CreateUnbounded<string>();
+        var target = new StringChannelTarget(channel.Writer, isColor: false);
+        target.Should().BeAssignableTo<ITextTarget>();
+    }
+
+    [Fact]
+    public void ByteChannelTarget_ImplementsITextTarget()
+    {
+        var channel = Channel.CreateUnbounded<byte[]>();
+        var target = new ByteChannelTarget(channel.Writer, isColor: false);
+        target.Should().BeAssignableTo<ITextTarget>();
+    }
+
+    [Fact]
+    public void StringChannelTarget_TextOutputIncludeConfig_CanBeSet()
+    {
+        var channel = Channel.CreateUnbounded<string>();
+        var target = new StringChannelTarget(channel.Writer, isColor: false);
+        var config = new TextOutputIncludeConfig { IncludeLoggerName = false };
+        target.TextOutputIncludeConfig = config;
+        target.TextOutputIncludeConfig.IncludeLoggerName.Should().BeFalse();
     }
 }

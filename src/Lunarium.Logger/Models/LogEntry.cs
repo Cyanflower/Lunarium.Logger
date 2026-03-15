@@ -34,6 +34,7 @@ public sealed record class LogEntry
 {
     // 只读属性，在构造函数中初始化后不能更改
     public string LoggerName { get; }
+    public ReadOnlyMemory<byte> LoggerNameBytes { get; }
     public DateTimeOffset Timestamp { get; }
     public LogLevel LogLevel { get; }
     public string Message { get; }
@@ -49,6 +50,7 @@ public sealed record class LogEntry
     // 完整的构造函数，用于初始化所有字段
     public LogEntry(
         string loggerName,
+        ReadOnlyMemory<byte> loggerNameBytes,
         DateTimeOffset timestamp,
         LogLevel logLevel,
         string message,
@@ -60,6 +62,7 @@ public sealed record class LogEntry
         Exception? exception = null)
     {
         LoggerName = loggerName;
+        LoggerNameBytes = loggerNameBytes;
         Timestamp = timestamp;
         LogLevel = logLevel;
         Message = message;

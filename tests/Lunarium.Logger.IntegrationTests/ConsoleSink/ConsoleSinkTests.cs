@@ -54,6 +54,7 @@ public class ConsoleSinkTests : IDisposable
     {
         return new LogEntry(
             loggerName: "ConsoleScope",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("ConsoleScope"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: message,

@@ -39,9 +39,10 @@ public interface IJsonTextTarget
 /// <summary>
 /// 定义了文本日志的颜色的能力和是否启用颜色输出
 /// </summary>
-public interface IColorTextTarget
+public interface ITextTarget
 {
     public bool IsColor { get; set; }
+    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; }
 }
 
 /// <summary>

@@ -32,7 +32,7 @@ internal static class JsonSerializationConfig
     /// <summary>
     /// 是否保持中文字符不转义（默认：true）
     /// </summary>
-    internal static bool PreserveChineseCharacters { get; private set; } = true;
+    internal static bool EnableUnsafeRelaxedJsonEscaping { get; private set; } = true;
 
     /// <summary>
     /// 是否使用缩进格式输出（默认：false，即单行输出）
@@ -58,12 +58,12 @@ internal static class JsonSerializationConfig
     }
 
     /// <summary>
-    /// 配置是否保持中文字符不转义
+    /// 配置是否宽松转义（允许直接输出中文等 Unicode 字符）
     /// </summary>
-    /// <param name="preserve">true 保持中文不转义，false 转义为 Unicode</param>
-    internal static void ConfigPreserveChineseCharacters(bool preserve)
+    /// <param name="preserve">true 保持不转义，false 转义为 Unicode</param>
+    internal static void ConfigUnsafeRelaxedJsonEscaping(bool preserve)
     {
-        PreserveChineseCharacters = preserve;
+        EnableUnsafeRelaxedJsonEscaping = preserve;
         ResetOptions();
     }
 
@@ -117,7 +117,7 @@ internal static class JsonSerializationConfig
         // - 日志文件不会被嵌入到 HTML/JS 中执行
         // - 允许所有 Unicode 字符（包括 Emoji、中文等）直接输出
         // - 仅转义 JSON 必须转义的字符（" \ 控制字符）
-        if (PreserveChineseCharacters)
+        if (EnableUnsafeRelaxedJsonEscaping)
         {
             options.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
         }

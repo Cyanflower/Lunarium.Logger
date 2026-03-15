@@ -266,20 +266,20 @@ public static class GlobalConfigurator
         #region JSON 序列化配置
 
         /// <summary>
-        /// 配置 JSON 序列化保持中文字符不转义（默认：启用）
+        /// 配置 JSON 序列化启用宽松转义模式: UnsafeRelaxedJsonEscaping（默认：启用）
         /// </summary>
-        public ConfigurationBuilder PreserveChineseCharacters()
+        public ConfigurationBuilder EnableUnsafeRelaxedJsonEscaping()
         {
-            AddConfigOperation(() => JsonSerializationConfig.ConfigPreserveChineseCharacters(true));
+            AddConfigOperation(() => JsonSerializationConfig.ConfigUnsafeRelaxedJsonEscaping(true));
             return this;
         }
 
         /// <summary>
-        /// 配置 JSON 序列化转义中文字符为 Unicode
+        /// 配置 JSON 序列化转义非 ASCII 字符为 Unicode
         /// </summary>
-        public ConfigurationBuilder EscapeChineseCharacters()
+        public ConfigurationBuilder DisableUnsafeRelaxedJsonEscaping()
         {
-            AddConfigOperation(() => JsonSerializationConfig.ConfigPreserveChineseCharacters(false));
+            AddConfigOperation(() => JsonSerializationConfig.ConfigUnsafeRelaxedJsonEscaping(false));
             return this;
         }
 

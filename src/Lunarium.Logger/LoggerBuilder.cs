@@ -37,7 +37,7 @@ public sealed class LoggerBuilder
     /// </summary>
     /// <param name="loggerName">要设置的名称。</param>
     /// <returns>返回当前构建器实例，以便进行链式调用。</returns>
-    public LoggerBuilder LoggerName(string loggerName)
+    public LoggerBuilder SetLoggerName(string loggerName)
     {
         _loggerName = loggerName;
         return this;

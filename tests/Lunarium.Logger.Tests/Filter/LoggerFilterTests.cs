@@ -32,6 +32,7 @@ public class LoggerFilterTests
     private static LogEntry MakeEntry(string context, LogLevel level = LogLevel.Info) =>
         new LogEntry(
             loggerName: "TestLogger",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("TestLogger"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: "test",

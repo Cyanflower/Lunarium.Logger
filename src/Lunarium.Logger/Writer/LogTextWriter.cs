@@ -47,6 +47,16 @@ internal sealed class LogTextWriter : LogWriter
         return this;
     }
 
+    protected override LogTextWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName)
+    {
+        if (!loggerName.IsEmpty)
+        {
+            _bufferWriter.Append("["u8);
+            _bufferWriter.Append(loggerName.Span);
+            _bufferWriter.Append("] "u8);
+        }
+        return this;
+    }
     protected override LogTextWriter WriteLevel(LogLevel level)
     {
         var levelStr = level switch

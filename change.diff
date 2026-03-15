@@ -1,71 +1,785 @@
-diff --git a/src/Lunarium.Logger/ILogger.cs b/src/Lunarium.Logger/ILogger.cs
-index 662f2e9..9806a79 100644
---- a/src/Lunarium.Logger/ILogger.cs
-+++ b/src/Lunarium.Logger/ILogger.cs
-@@ -22,11 +22,6 @@ namespace Lunarium.Logger;
- /// </summary>
- public interface ILogger : IAsyncDisposable
- {
--
--    string GetContext();
--
--    ReadOnlyMemory<byte> GetContextSpan();
--
-     /// <summary>
-     /// 记录一条具有指定级别和详细信息的日志消息。
-     /// 这是所有日志记录方法的基础实现。
+diff --git a/benchmarks/Lunarium.Logger.Benchmarks/ChannelTargetBenchmarks.cs b/benchmarks/Lunarium.Logger.Benchmarks/ChannelTargetBenchmarks.cs
+index 8f0ad0f..9737954 100644
+--- a/benchmarks/Lunarium.Logger.Benchmarks/ChannelTargetBenchmarks.cs
++++ b/benchmarks/Lunarium.Logger.Benchmarks/ChannelTargetBenchmarks.cs
+@@ -58,6 +58,7 @@ public class ChannelTargetBenchmarks
+         var ts = DateTimeOffset.UtcNow;
+         _entry = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "User {Name} logged in",
+diff --git a/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs b/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs
+index a1e7f5e..485aa8d 100644
+--- a/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs
++++ b/benchmarks/Lunarium.Logger.Benchmarks/FilterBenchmarks.cs
+@@ -61,6 +61,7 @@ public class FilterBenchmarks
+             var ctx = $"Service.Component.Module_{i:D4}";
+             _uniqueEntries[i] = new LogEntry(
+                 loggerName: "Bench",
++                loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+                 timestamp: ts,
+                 logLevel: LogLevel.Info,
+                 message: "test",
+@@ -96,6 +97,7 @@ public class FilterBenchmarks
+ 
+         _entryMatchingContext = new LogEntry(
+             loggerName: "Bench",
++                loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "test",
+@@ -107,6 +109,7 @@ public class FilterBenchmarks
+ 
+         _entryNonMatchingContext = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "test",
+diff --git a/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs b/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs
+index dd867b7..24c34b2 100644
+--- a/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs
++++ b/benchmarks/Lunarium.Logger.Benchmarks/LogWriterBenchmarks.cs
+@@ -57,6 +57,7 @@ public class LogWriterBenchmarks
+ 
+         _entryPlainText = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "Application started successfully",
+@@ -68,6 +69,7 @@ public class LogWriterBenchmarks
+ 
+         _entrySingleProp = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "User {Name} logged in",
+@@ -79,6 +81,7 @@ public class LogWriterBenchmarks
+ 
+         _entryMultiProp = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "Request {Method} {Url} completed in {Duration}ms with status {Status}",
+@@ -90,6 +93,7 @@ public class LogWriterBenchmarks
+ 
+         _entryWithFormatAlign = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Warning,
+             message: "{Count,8:D} items processed, {Percent:P1} complete",
+@@ -101,6 +105,7 @@ public class LogWriterBenchmarks
+ 
+         _entryNumeric = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "Process {Id} at {Time} spent {Duration}",
+@@ -112,6 +117,7 @@ public class LogWriterBenchmarks
+ 
+         _entryComplex = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "Request context: {@Payload}",
+@@ -123,6 +129,7 @@ public class LogWriterBenchmarks
+ 
+         _entryIDestructured = new LogEntry(
+             loggerName: "Bench",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Bench"),
+             timestamp: ts,
+             logLevel: LogLevel.Info,
+             message: "Request context: {@Payload}",
+diff --git a/change.diff b/change.diff
+index 2ebdc65..952c2ea 100644
+--- a/change.diff
++++ b/change.diff
+@@ -1,71 +0,0 @@
+-diff --git a/src/Lunarium.Logger/ILogger.cs b/src/Lunarium.Logger/ILogger.cs
+-index 662f2e9..9806a79 100644
+---- a/src/Lunarium.Logger/ILogger.cs
+-+++ b/src/Lunarium.Logger/ILogger.cs
+-@@ -22,11 +22,6 @@ namespace Lunarium.Logger;
+- /// </summary>
+- public interface ILogger : IAsyncDisposable
+- {
+--
+--    string GetContext();
+--
+--    ReadOnlyMemory<byte> GetContextSpan();
+--
+-     /// <summary>
+-     /// 记录一条具有指定级别和详细信息的日志消息。
+-     /// 这是所有日志记录方法的基础实现。
+-diff --git a/src/Lunarium.Logger/Logger.cs b/src/Lunarium.Logger/Logger.cs
+-index 4266fa2..1220c4c 100644
+---- a/src/Lunarium.Logger/Logger.cs
+-+++ b/src/Lunarium.Logger/Logger.cs
+-@@ -57,16 +57,6 @@ internal sealed class Logger : ILogger, IAsyncDisposable
+-         _processTask = Task.Run(ProcessQueueAsync);
+-     }
+- 
+--    public string GetContext()
+--    {
+--        return "";
+--    }
+--
+--    public ReadOnlyMemory<byte> GetContextSpan()
+--    {
+--        return _loggerNameBytes;
+--    }
+--
+-     /// <summary>
+-     /// 在后台运行，持续从 Channel 中读取日志条目并分发给所有 Sink。
+-     /// </summary>
+-diff --git a/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs b/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs
+-index 3fee851..0b17a8a 100644
+---- a/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs
+-+++ b/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs
+-@@ -20,7 +20,7 @@ namespace Lunarium.Logger.Wrapper;
+- /// 一个日志包装器（装饰器），用于为一个已存在的 ILogger 实例添加固定的上下文信息。
+- /// 每次通过此包装器记录日志时，它都会自动附加这个上下文。
+- /// </summary>
+--internal sealed class LoggerWrapper : ILogger
+-+internal sealed class LoggerWrapper : ILogger, IContextProvider
+- {
+-     // 引用被包装的日志实例或下一层包装器
+-     private readonly ILogger _logger;
+-@@ -36,9 +36,17 @@ internal sealed class LoggerWrapper : ILogger
+-     internal LoggerWrapper(ILogger logger, string context)
+-     {
+-         // 扁平化：始终持有 root logger，避免链式调用触发中间层 slow path
+--        _logger = logger is LoggerWrapper w ? w._logger : logger;
+--        var baseContext = logger.GetContext();
+--        _context = string.IsNullOrEmpty(baseContext) ? context : $"{baseContext}.{context}";
+-+        if (logger is LoggerWrapper wrapper)
+-+        {
+-+            _logger = wrapper._logger; // 直接持有最底层的 Logger 实例，避免多层包装导致的性能问题，同时实现扁平化
+-+            _context = $"{wrapper.GetContext()}.{context}";
+-+        }
+-+        else
+-+        {
+-+            _logger = logger;
+-+            _context = context;
+-+        }
+-+
+-         _contextBytes = Encoding.UTF8.GetBytes(_context);
+-     }
+- 
+diff --git a/src/Lunarium.Logger/LogSink.cs b/src/Lunarium.Logger/LogSink.cs
+index f04ee46..26a7c9c 100644
+--- a/src/Lunarium.Logger/LogSink.cs
++++ b/src/Lunarium.Logger/LogSink.cs
+@@ -76,9 +76,16 @@ internal readonly record struct Sink
+         {
+             jsonSink.ToJson = Configuration.ToJson.Value;
+         }
+-        if (Target is IColorTextTarget colorSink && Configuration.IsColor is not null)
++        if (Target is ITextTarget colorSink)
+         {
+-            colorSink.IsColor = Configuration.IsColor.Value;
++            if (Configuration.IsColor is not null)
++            {
++                colorSink.IsColor = Configuration.IsColor.Value;
++            }
++            if (Configuration.TextOutputIncludeConfig is not null)
++            {
++                colorSink.TextOutputIncludeConfig = Configuration.TextOutputIncludeConfig;
++            }
+         }
+     }
+ }
 diff --git a/src/Lunarium.Logger/Logger.cs b/src/Lunarium.Logger/Logger.cs
-index 4266fa2..1220c4c 100644
+index 1220c4c..5945dc8 100644
 --- a/src/Lunarium.Logger/Logger.cs
 +++ b/src/Lunarium.Logger/Logger.cs
-@@ -57,16 +57,6 @@ internal sealed class Logger : ILogger, IAsyncDisposable
-         _processTask = Task.Run(ProcessQueueAsync);
+@@ -104,12 +104,13 @@ internal sealed class Logger : ILogger, IAsyncDisposable
+     
+             var entry = new LogEntry(
+                 loggerName: _loggerName,
++                loggerNameBytes: _loggerNameBytes,
+                 timestamp: LogTimestampConfig.GetTimestamp(),
+                 logLevel: level,
+                 message: message,
+                 properties: propertyValues,
+-                context: string.IsNullOrEmpty(context) ? _loggerName : context,
+-                contextBytes: contextBytes.IsEmpty ? _loggerNameBytes : contextBytes,
++                context: context,
++                contextBytes: contextBytes,
+                 scope: scope,
+                 messageTemplate: LogParser.EmptyMessageTemplate,
+                 exception: ex
+diff --git a/src/Lunarium.Logger/Models/LogEntry.cs b/src/Lunarium.Logger/Models/LogEntry.cs
+index 04f6c51..4b9f6d7 100644
+--- a/src/Lunarium.Logger/Models/LogEntry.cs
++++ b/src/Lunarium.Logger/Models/LogEntry.cs
+@@ -34,6 +34,7 @@ public sealed record class LogEntry
+ {
+     // 只读属性，在构造函数中初始化后不能更改
+     public string LoggerName { get; }
++    public ReadOnlyMemory<byte> LoggerNameBytes { get; }
+     public DateTimeOffset Timestamp { get; }
+     public LogLevel LogLevel { get; }
+     public string Message { get; }
+@@ -49,6 +50,7 @@ public sealed record class LogEntry
+     // 完整的构造函数，用于初始化所有字段
+     public LogEntry(
+         string loggerName,
++        ReadOnlyMemory<byte> loggerNameBytes,
+         DateTimeOffset timestamp,
+         LogLevel logLevel,
+         string message,
+@@ -60,6 +62,7 @@ public sealed record class LogEntry
+         Exception? exception = null)
+     {
+         LoggerName = loggerName;
++        LoggerNameBytes = loggerNameBytes;
+         Timestamp = timestamp;
+         LogLevel = logLevel;
+         Message = message;
+diff --git a/src/Lunarium.Logger/SinkOutputConfig.cs b/src/Lunarium.Logger/SinkOutputConfig.cs
+index 425e6c6..dd8d33c 100644
+--- a/src/Lunarium.Logger/SinkOutputConfig.cs
++++ b/src/Lunarium.Logger/SinkOutputConfig.cs
+@@ -22,9 +22,12 @@ public record SinkOutputConfig
+     // Defualt: null (Unset) - Sink will use its own default behavior
+     // 使用 Json 格式输出日志
+     public bool? ToJson { get; init; } = null;
++
+     // 使用颜色输出日志（仅适用于支持颜色的 IColorTextTarget， 如: ConsoleTarget）
+     public bool? IsColor { get; init; } = null;
+ 
++    public TextOutputIncludeConfig? TextOutputIncludeConfig { get; init; } = null;
++
+     /// <summary>
+     /// 上下文前缀过滤器:
+     /// 包含规则列表。
+@@ -50,7 +53,7 @@ public record SinkOutputConfig
+     /// <para>当 <see cref="IgnoreFilterCase"/> 为 true 时为 <see cref="StringComparison.OrdinalIgnoreCase"/>，
+     /// 否则为 <see cref="StringComparison.Ordinal"/>。</para>
+     /// </summary>
+-    internal StringComparison ComparisonType => 
++    internal StringComparison ComparisonType =>
+         IgnoreFilterCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+ 
+     /// <summary>
+@@ -62,4 +65,12 @@ public record SinkOutputConfig
+     /// 允许记录的最高日志级别。
+     /// </summary>
+     public LogLevel LogMaxLevel { get; init; } = LogLevel.Critical;
++}
++
++public record class TextOutputIncludeConfig
++{
++    public bool IncludeTimestamp { get; init; } = true;
++    public bool IncludeLoggerName { get; init; } = true;
++    public bool IncludeLevel { get; init; } = true;
++    public bool IncludeContext { get; init; } = true;
+ }
+\ No newline at end of file
+diff --git a/src/Lunarium.Logger/Target/ChannelTarget.cs b/src/Lunarium.Logger/Target/ChannelTarget.cs
+index 7b843a8..6e94c47 100644
+--- a/src/Lunarium.Logger/Target/ChannelTarget.cs
++++ b/src/Lunarium.Logger/Target/ChannelTarget.cs
+@@ -49,15 +49,17 @@ public abstract class ChannelTarget<T> : ILogTarget, IDisposable
+ /// ⚠️ 性能提示：每次 Emit 会产生一次 string 堆分配（UTF-8 解码为 UTF-16）。
+ /// 若消费者直接写网络/文件，建议改用 <see cref="ByteChannelTarget"/>。
+ /// </summary>
+-public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
++public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget, ITextTarget
+ {
+-    private readonly bool _isColor;
+     public bool ToJson { get; set; } = false;
++    
++    public bool IsColor { get; set; } = false;
++    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
+ 
+     public StringChannelTarget(ChannelWriter<string> writer, bool isColor)
+         : base(writer)
+     {
+-        _isColor = isColor;
++        IsColor = isColor;
      }
  
--    public string GetContext()
--    {
--        return "";
--    }
--
--    public ReadOnlyMemory<byte> GetContextSpan()
--    {
--        return _loggerNameBytes;
--    }
--
-     /// <summary>
-     /// 在后台运行，持续从 Channel 中读取日志条目并分发给所有 Sink。
-     /// </summary>
-diff --git a/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs b/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs
-index 3fee851..0b17a8a 100644
---- a/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs
-+++ b/src/Lunarium.Logger/Wrapper/LoggerWrapper.cs
-@@ -20,7 +20,7 @@ namespace Lunarium.Logger.Wrapper;
- /// 一个日志包装器（装饰器），用于为一个已存在的 ILogger 实例添加固定的上下文信息。
- /// 每次通过此包装器记录日志时，它都会自动附加这个上下文。
+     protected override string Transform(LogEntry entry)
+@@ -71,7 +73,7 @@ public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
+         //           否 -> LogTextWriter
+         LogWriter logWriter = ToJson
+             ? WriterPool.Get<LogJsonWriter>()
+-            : _isColor
++            : IsColor
+                 ? WriterPool.Get<LogColorTextWriter>()
+                 : WriterPool.Get<LogTextWriter>();
+         try
+@@ -92,22 +94,23 @@ public sealed class StringChannelTarget : ChannelTarget<string>, IJsonTextTarget
+ /// 适合消费者直接进行网络传输或文件写入的场景。
+ /// ⚠️ 性能提示：每次 Emit 仍会产生一次 byte[] 堆分配（ToArray()）。
  /// </summary>
--internal sealed class LoggerWrapper : ILogger
-+internal sealed class LoggerWrapper : ILogger, IContextProvider
+-public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
++public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget, ITextTarget
  {
-     // 引用被包装的日志实例或下一层包装器
-     private readonly ILogger _logger;
-@@ -36,9 +36,17 @@ internal sealed class LoggerWrapper : ILogger
-     internal LoggerWrapper(ILogger logger, string context)
+-    private readonly bool _isColor;
+     public bool ToJson { get; set; } = false;
++    public bool IsColor { get; set; } = false;
++    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
+ 
+     public ByteChannelTarget(ChannelWriter<byte[]> writer, bool isColor)
+         : base(writer)
      {
-         // 扁平化：始终持有 root logger，避免链式调用触发中间层 slow path
--        _logger = logger is LoggerWrapper w ? w._logger : logger;
--        var baseContext = logger.GetContext();
--        _context = string.IsNullOrEmpty(baseContext) ? context : $"{baseContext}.{context}";
-+        if (logger is LoggerWrapper wrapper)
+-        _isColor = isColor;
++        IsColor = isColor;
+     }
+ 
+     protected override byte[] Transform(LogEntry entry)
+     {
+         LogWriter logWriter = ToJson
+             ? WriterPool.Get<LogJsonWriter>()
+-            : _isColor
++            : IsColor
+                 ? WriterPool.Get<LogColorTextWriter>()
+                 : WriterPool.Get<LogTextWriter>();
+         try
+diff --git a/src/Lunarium.Logger/Target/ConsoleTarget.cs b/src/Lunarium.Logger/Target/ConsoleTarget.cs
+index b291c14..39b5e55 100644
+--- a/src/Lunarium.Logger/Target/ConsoleTarget.cs
++++ b/src/Lunarium.Logger/Target/ConsoleTarget.cs
+@@ -22,7 +22,7 @@ namespace Lunarium.Logger.Target;
+ /// 它支持纯文本和 JSON 两种输出模式，并对结构化数据进行智能染色。
+ /// 输出通过底层字节流写入，避免 char→byte 中间转换。
+ /// </summary>
+-public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarget
++public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, ITextTarget
+ {
+     // 线程安全锁，以防止多条日志消息的输出在控制台中交错
+     private readonly Lock _lock = new();
+@@ -34,6 +34,8 @@ public sealed class ConsoleTarget : ILogTarget, IJsonTextTarget, IColorTextTarge
+     public bool ToJson { get; set; } = false;
+     public bool IsColor { get; set; } = true;
+ 
++    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
++
+     public ConsoleTarget()
+     {
+         _stdout = Console.OpenStandardOutput();
+diff --git a/src/Lunarium.Logger/Target/FileTarget.cs b/src/Lunarium.Logger/Target/FileTarget.cs
+index 9bfeab8..886afbf 100644
+--- a/src/Lunarium.Logger/Target/FileTarget.cs
++++ b/src/Lunarium.Logger/Target/FileTarget.cs
+@@ -24,7 +24,7 @@ namespace Lunarium.Logger.Target;
+ /// 两种轮转策略可独立启用，也可同时启用（任一条件触发即轮转）。
+ /// Writer 层渲染的 UTF-8 字节直接写入 FileStream，无 StreamWriter 中间缓冲。
+ /// </summary>
+-public sealed class FileTarget : ILogTarget, IJsonTextTarget
++public sealed class FileTarget : ILogTarget, IJsonTextTarget, ITextTarget
+ {
+     // 进程级路径追踪：防止不同 Logger 的 FileTarget 写入同一文件
+     private static readonly ConcurrentDictionary<string, byte> _activePaths =
+@@ -44,6 +44,8 @@ public sealed class FileTarget : ILogTarget, IJsonTextTarget
+ 
+     // === 日志配置 ===
+     public bool ToJson { get; set; } = false;
++    public bool IsColor { get; set; } = false;
++    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; } = new TextOutputIncludeConfig();
+     private readonly string _logFilePath;
+     // 单个文件的最大字节数，-1 表示不限制
+     private readonly long _maxFileSize;
+diff --git a/src/Lunarium.Logger/Target/ILogTarget.cs b/src/Lunarium.Logger/Target/ILogTarget.cs
+index 3709e80..af73aa9 100644
+--- a/src/Lunarium.Logger/Target/ILogTarget.cs
++++ b/src/Lunarium.Logger/Target/ILogTarget.cs
+@@ -39,9 +39,10 @@ public interface IJsonTextTarget
+ /// <summary>
+ /// 定义了文本日志的颜色的能力和是否启用颜色输出
+ /// </summary>
+-public interface IColorTextTarget
++public interface ITextTarget
+ {
+     public bool IsColor { get; set; }
++    public TextOutputIncludeConfig TextOutputIncludeConfig { get; set; }
+ }
+ 
+ /// <summary>
+diff --git a/src/Lunarium.Logger/Writer/LogColorTextWriter.cs b/src/Lunarium.Logger/Writer/LogColorTextWriter.cs
+index 80604ce..4fb3fc3 100644
+--- a/src/Lunarium.Logger/Writer/LogColorTextWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogColorTextWriter.cs
+@@ -79,6 +79,17 @@ internal sealed class LogColorTextWriter : LogWriter
+         return this;
+     }
+ 
++    protected override LogColorTextWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName)
++    {
++        _bufferWriter.Append(Prefix);
++        SetColor(ContextColor);
++        _bufferWriter.Append(loggerName.Span);
++        _bufferWriter.Append(Suffix);
++        _bufferWriter.Append(' ');
++        
++        return this;
++    }
++
+     protected override LogColorTextWriter WriteLevel(LogLevel level)
+     {
+         var levelStr = level switch
+@@ -145,7 +156,7 @@ internal sealed class LogColorTextWriter : LogWriter
+         if (exception != null)
+         {
+             _bufferWriter.AppendLine();
+-            SetColor(ConsoleColor.Red);
++            SetColor(ExceptionColor);
+             _bufferWriter.Append(exception.ToString()); // Explicit ToString to ensure Append(string) is called
+             _bufferWriter.Append(AnsiReset);
+         }
+diff --git a/src/Lunarium.Logger/Writer/LogJsonWriter.cs b/src/Lunarium.Logger/Writer/LogJsonWriter.cs
+index 6c0f60a..d72b69d 100644
+--- a/src/Lunarium.Logger/Writer/LogJsonWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogJsonWriter.cs
+@@ -123,6 +123,12 @@ internal sealed class LogJsonWriter : LogWriter
+         return this;
+     }
+ 
++    protected override LogWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName)
++    {
++        _jsonWriter.WriteString("LoggerName", loggerName.Span);
++        return this;
++    }
++
+     protected override LogWriter WriteLevel(LogLevel level)
+     {
+         _jsonWriter.WritePropertyName(LevelKey);
+diff --git a/src/Lunarium.Logger/Writer/LogTextWriter.cs b/src/Lunarium.Logger/Writer/LogTextWriter.cs
+index bcaa0d2..a293248 100644
+--- a/src/Lunarium.Logger/Writer/LogTextWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogTextWriter.cs
+@@ -47,6 +47,16 @@ internal sealed class LogTextWriter : LogWriter
+         return this;
+     }
+ 
++    protected override LogTextWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName)
++    {
++        if (!loggerName.IsEmpty)
 +        {
-+            _logger = wrapper._logger; // 直接持有最底层的 Logger 实例，避免多层包装导致的性能问题，同时实现扁平化
-+            _context = $"{wrapper.GetContext()}.{context}";
++            _bufferWriter.Append("["u8);
++            _bufferWriter.Append(loggerName.Span);
++            _bufferWriter.Append("] "u8);
 +        }
-+        else
++        return this;
++    }
+     protected override LogTextWriter WriteLevel(LogLevel level)
+     {
+         var levelStr = level switch
+diff --git a/src/Lunarium.Logger/Writer/LogWriter.cs b/src/Lunarium.Logger/Writer/LogWriter.cs
+index 13ab4dd..21a4d9e 100644
+--- a/src/Lunarium.Logger/Writer/LogWriter.cs
++++ b/src/Lunarium.Logger/Writer/LogWriter.cs
+@@ -30,10 +30,10 @@ internal abstract class LogWriter : IDisposable
+     protected readonly Utf8JsonWriter _serializerWriter;
+     // 状态定义：0 = 使用中 (Active), 1 = 已释放/在池中 (Disposed/InPool)
+     // 使用 int 以便进行 Interlocked 操作
+-    private int _disposedState = 0; 
++    private int _disposedState = 0;
+     private const int DefaultMaxCapacity = 32 * 1024; // 默认4KB阈值
+     protected static ReadOnlySpan<byte> SpacePool => "                                "u8; // 32个空格, 别查了, 我tm亲手敲的, tmd有没有不这么丑的写法啊
+-    
++
+ 
+     public LogWriter()
+     {
+@@ -96,9 +96,9 @@ internal abstract class LogWriter : IDisposable
+     public void Dispose()
+     {
+         // 原子检查并设置：如果当前是 0，则设为 1；如果当前已经是 1，说明已归还，直接返回
+-        if (Interlocked.CompareExchange(ref _disposedState, 1, 0) != 0) 
++        if (Interlocked.CompareExchange(ref _disposedState, 1, 0) != 0)
+         {
+-            return; 
++            return;
+         }
+ 
+         // 只有抢到“从 0 变 1”权利的线程才能执行归还逻辑
+@@ -113,7 +113,7 @@ internal abstract class LogWriter : IDisposable
+     /// </summary>
+     internal void DisposeAndReturnArrayBuffer()
+     {
+-        try 
++        try
+         {
+             // 增加对环境状态的判断：如果进程正在关闭，归还 ArrayPool 可能不再安全或不再必要
+             if (Environment.HasShutdownStarted) return;
+@@ -140,13 +140,52 @@ internal abstract class LogWriter : IDisposable
+     /// <summary>
+     /// 渲染日志条目到内部缓冲区
+     /// </summary>
++    internal void Render(LogEntry logEntry, TextOutputIncludeConfig config)
++    {
++        BeginEntry();
++
++        if (config.IncludeTimestamp)
 +        {
-+            _logger = logger;
-+            _context = context;
++            WriteTimestamp(logEntry.Timestamp);
 +        }
 +
-         _contextBytes = Encoding.UTF8.GetBytes(_context);
++        if (config.IncludeLevel)
++        {
++            WriteLevel(logEntry.LogLevel);
++        }
++
++        if (config.IncludeLoggerName)
++        {
++            WriteLoggerName(logEntry.LoggerNameBytes);
++        }
++
++        if (config.IncludeContext)
++        {
++            WriteContext(logEntry.ContextBytes);
++        }
++
++        // 🎣 钩子：允许子类在渲染消息前插入额外逻辑(如 JSON 的 OriginalMessage)
++        BeforeRenderMessage(logEntry);
++
++        WriteRenderedMessage(logEntry.MessageTemplate.MessageTemplateTokens, logEntry.Properties);
++
++        // 🎣 钩子：允许子类在渲染消息后插入额外逻辑(如 JSON 的 PropertyValue)
++        AfterRenderMessage(logEntry);
++
++        WriteException(logEntry.Exception);
++        EndEntry();
++
++        _bufferWriter.AppendLine();
++    }
++
+     internal void Render(LogEntry logEntry)
+     {
+         BeginEntry();
++
+         WriteTimestamp(logEntry.Timestamp);
+         WriteLevel(logEntry.LogLevel);
+-
+         WriteContext(logEntry.ContextBytes);
++        WriteLoggerName(logEntry.LoggerNameBytes);
+ 
+         // 🎣 钩子：允许子类在渲染消息前插入额外逻辑(如 JSON 的 OriginalMessage)
+         BeforeRenderMessage(logEntry);
+@@ -204,6 +243,7 @@ internal abstract class LogWriter : IDisposable
+ 
+     protected abstract LogWriter WriteTimestamp(DateTimeOffset timestamp);
+     protected abstract LogWriter WriteLevel(LogLevel level);
++    protected abstract LogWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName);
+     protected abstract LogWriter WriteContext(ReadOnlyMemory<byte> context);
+     protected abstract LogWriter WriteRenderedMessage(IReadOnlyList<MessageTemplateTokens> tokens, object?[] propertys);
+     protected abstract LogWriter WriteException(Exception? exception);
+@@ -264,7 +304,7 @@ internal abstract class LogWriter : IDisposable
+                 {
+                     TrySerializeToJson(value);
+                 }
+-                
++
+                 return; // 处理完就返回, 跳过构建格式字符串, Json不能使用对齐和格式化
+             }
+ 
+@@ -379,15 +419,15 @@ internal abstract class LogWriter : IDisposable
+         var index = _bufferWriter.WrittenCount;
+         // 无论如何进入时都重置 jsonWriter 并重新绑定 bufferWriter
+         _serializerWriter.Reset(_bufferWriter);
+-        try 
+-        { 
+-            JsonSerializer.Serialize(_serializerWriter, value, JsonSerializationConfig.Options); 
++        try
++        {
++            JsonSerializer.Serialize(_serializerWriter, value, JsonSerializationConfig.Options);
+             _serializerWriter.Flush();
+         }
+-        catch (Exception ex) 
++        catch (Exception ex)
+         {
+             _bufferWriter.Rewind(index); // 回退到序列化前的状态，丢弃任何部分写入的内容
+-            InternalLogger.Error(ex, "LogWriter TrySerializeToJson Failed"); 
++            InternalLogger.Error(ex, "LogWriter TrySerializeToJson Failed");
+         }
+         finally
+         {
+diff --git a/tests/Lunarium.Logger.IntegrationTests/ConsoleSink/ConsoleSinkTests.cs b/tests/Lunarium.Logger.IntegrationTests/ConsoleSink/ConsoleSinkTests.cs
+index 73a736d..1c25c52 100644
+--- a/tests/Lunarium.Logger.IntegrationTests/ConsoleSink/ConsoleSinkTests.cs
++++ b/tests/Lunarium.Logger.IntegrationTests/ConsoleSink/ConsoleSinkTests.cs
+@@ -54,6 +54,7 @@ public class ConsoleSinkTests : IDisposable
+     {
+         return new LogEntry(
+             loggerName: "ConsoleScope",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("ConsoleScope"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: message,
+diff --git a/tests/Lunarium.Logger.IntegrationTests/FileSink/FileSinkTests.cs b/tests/Lunarium.Logger.IntegrationTests/FileSink/FileSinkTests.cs
+index 6f559ce..a5c9ba3 100644
+--- a/tests/Lunarium.Logger.IntegrationTests/FileSink/FileSinkTests.cs
++++ b/tests/Lunarium.Logger.IntegrationTests/FileSink/FileSinkTests.cs
+@@ -61,6 +61,7 @@ public class FileTargetTests : IDisposable
+     {
+         return new LogEntry(
+             loggerName: "FileScope",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("FileScope"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: message,
+@@ -140,6 +141,7 @@ public class FileTargetTests : IDisposable
+         var yesterday = DateTimeOffset.UtcNow.AddDays(-1);
+         var entry1 = new LogEntry(
+             loggerName: "FileScope",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("FileScope"),
+             timestamp: yesterday,
+             logLevel: LogLevel.Error,
+             message: "Day 1",
+@@ -315,6 +317,7 @@ public class FileTargetTests : IDisposable
+             var ts = baseTime.AddDays(i);
+             var entry = new LogEntry(
+                 loggerName: "FileScope",
++                loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("FileScope"),
+                 timestamp: ts,
+                 logLevel: LogLevel.Error,
+                 message: $"day {i}",
+diff --git a/tests/Lunarium.Logger.Tests/Core/LoggerCoverageGapTests.cs b/tests/Lunarium.Logger.Tests/Core/LoggerCoverageGapTests.cs
+index 5ecede8..6b06e39 100644
+--- a/tests/Lunarium.Logger.Tests/Core/LoggerCoverageGapTests.cs
++++ b/tests/Lunarium.Logger.Tests/Core/LoggerCoverageGapTests.cs
+@@ -32,6 +32,7 @@ public class LoggerCoverageGapTests
+     private static LogEntry MakeEntry(string msg = "hello") =>
+         new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: LogLevel.Info,
+             message: msg,
+diff --git a/tests/Lunarium.Logger.Tests/Filter/LoggerFilterTests.cs b/tests/Lunarium.Logger.Tests/Filter/LoggerFilterTests.cs
+index 098303f..30bd107 100644
+--- a/tests/Lunarium.Logger.Tests/Filter/LoggerFilterTests.cs
++++ b/tests/Lunarium.Logger.Tests/Filter/LoggerFilterTests.cs
+@@ -32,6 +32,7 @@ public class LoggerFilterTests
+     private static LogEntry MakeEntry(string context, LogLevel level = LogLevel.Info) =>
+         new LogEntry(
+             loggerName: "TestLogger",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("TestLogger"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: "test",
+diff --git a/tests/Lunarium.Logger.Tests/Integration/LoggerIntegrationTests.cs b/tests/Lunarium.Logger.Tests/Integration/LoggerIntegrationTests.cs
+index 2ae7a3e..f92e1c8 100644
+--- a/tests/Lunarium.Logger.Tests/Integration/LoggerIntegrationTests.cs
++++ b/tests/Lunarium.Logger.Tests/Integration/LoggerIntegrationTests.cs
+@@ -250,6 +250,7 @@ public class ChannelTargetDirectTests
+     {
+         var entry = new LogEntry(
+             loggerName: "DirectTest",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("DirectTest"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: msg,
+@@ -288,6 +289,7 @@ public class ChannelTargetDirectTests
+         var ts = DateTimeOffset.UtcNow;
+         var entry = new LogEntry(
+             loggerName: "Logger",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Logger"),
+             timestamp: ts,
+             logLevel: LogLevel.Error,
+             message: "msg",
+diff --git a/tests/Lunarium.Logger.Tests/Models/LogConfigTests.cs b/tests/Lunarium.Logger.Tests/Models/LogConfigTests.cs
+index 0a89c0f..6ca8b3e 100644
+--- a/tests/Lunarium.Logger.Tests/Models/LogConfigTests.cs
++++ b/tests/Lunarium.Logger.Tests/Models/LogConfigTests.cs
+@@ -216,7 +216,7 @@ public class LogConfigTests
+         var cfg = new SinkOutputConfig { IsColor = true };
+         Action act = () => _ = new Sink(target, cfg);
+         act.Should().NotThrow();
+-        target.Should().NotBeAssignableTo<IColorTextTarget>();
++        target.Should().NotBeAssignableTo<ITextTarget>();
      }
  
+     // ─────────────────────────────────────────────────────────────────────────
+@@ -226,6 +226,7 @@ public class LogConfigTests
+     private static LogEntry MakeLogEntry(LogLevel level = LogLevel.Info, string msg = "hello")
+         => new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: msg,
+diff --git a/tests/Lunarium.Logger.Tests/Target/ChannelTargetTests.cs b/tests/Lunarium.Logger.Tests/Target/ChannelTargetTests.cs
+index 52079d7..e4bc79e 100644
+--- a/tests/Lunarium.Logger.Tests/Target/ChannelTargetTests.cs
++++ b/tests/Lunarium.Logger.Tests/Target/ChannelTargetTests.cs
+@@ -27,6 +27,7 @@ public class ChannelTargetTests
+     private static LogEntry MakeEntry(string msg = "hello") =>
+         new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: LogLevel.Info,
+             message: msg,
+diff --git a/tests/Lunarium.Logger.Tests/Writer/LogColorTextWriterTests.cs b/tests/Lunarium.Logger.Tests/Writer/LogColorTextWriterTests.cs
+index a813040..997bbb8 100644
+--- a/tests/Lunarium.Logger.Tests/Writer/LogColorTextWriterTests.cs
++++ b/tests/Lunarium.Logger.Tests/Writer/LogColorTextWriterTests.cs
+@@ -43,6 +43,7 @@ public class LogColorTextWriterTests
+     {
+         var entry = new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+             logLevel: level,
+             message: message,
+diff --git a/tests/Lunarium.Logger.Tests/Writer/LogJsonWriterTests.cs b/tests/Lunarium.Logger.Tests/Writer/LogJsonWriterTests.cs
+index cf92c06..7268ff4 100644
+--- a/tests/Lunarium.Logger.Tests/Writer/LogJsonWriterTests.cs
++++ b/tests/Lunarium.Logger.Tests/Writer/LogJsonWriterTests.cs
+@@ -42,6 +42,7 @@ public class LogJsonWriterTests
+     {
+         var entry = new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
+             logLevel: level,
+             message: message,
+diff --git a/tests/Lunarium.Logger.Tests/Writer/LogTextWriterTests.cs b/tests/Lunarium.Logger.Tests/Writer/LogTextWriterTests.cs
+index 4e277ed..41bd137 100644
+--- a/tests/Lunarium.Logger.Tests/Writer/LogTextWriterTests.cs
++++ b/tests/Lunarium.Logger.Tests/Writer/LogTextWriterTests.cs
+@@ -40,6 +40,7 @@ public class LogTextWriterTests
+     {
+         var entry = new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+             logLevel: level,
+             message: message,
+diff --git a/tests/Lunarium.Logger.Tests/Writer/LogWriterTests.cs b/tests/Lunarium.Logger.Tests/Writer/LogWriterTests.cs
+index f671584..2cc2eec 100644
+--- a/tests/Lunarium.Logger.Tests/Writer/LogWriterTests.cs
++++ b/tests/Lunarium.Logger.Tests/Writer/LogWriterTests.cs
+@@ -47,6 +47,7 @@ public class LogWriterTests
+         var parsed = LogParser.ParseMessage(template);
+         return new LogEntry(
+             loggerName: "TestLogger",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: template,
+diff --git a/tests/Lunarium.Logger.Tests/Writer/WriterCoverageGapTests.cs b/tests/Lunarium.Logger.Tests/Writer/WriterCoverageGapTests.cs
+index 2caae05..859ab1b 100644
+--- a/tests/Lunarium.Logger.Tests/Writer/WriterCoverageGapTests.cs
++++ b/tests/Lunarium.Logger.Tests/Writer/WriterCoverageGapTests.cs
+@@ -39,6 +39,7 @@ public class WriterCoverageGapTests
+         var parsed = LogParser.ParseMessage(template);
+         return new LogEntry(
+             loggerName: "Test",
++            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
+             timestamp: DateTimeOffset.UtcNow,
+             logLevel: level,
+             message: template,

@@ -43,7 +43,7 @@ public class LoggerThroughputBenchmarks
         BenchmarkHelper.EnsureGlobalConfig();
 
         _logger = new LoggerBuilder()
-            .LoggerName("ThroughputBench")
+            .SetLoggerName("ThroughputBench")
             .AddSink(new NullTarget())
             .Build();
 

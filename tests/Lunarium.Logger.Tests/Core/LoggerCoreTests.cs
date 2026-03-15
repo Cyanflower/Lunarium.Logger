@@ -165,7 +165,7 @@ public class LoggerCoreTests
     public void LoggerBuilder_LoggerName_ReturnsSameBuilder()
     {
         var builder = new LoggerBuilder();
-        var returned = builder.LoggerName("TestApp");
+        var returned = builder.SetLoggerName("TestApp");
         returned.Should().BeSameAs(builder);
     }
 

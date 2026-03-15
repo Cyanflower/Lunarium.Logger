@@ -22,8 +22,11 @@ public record SinkOutputConfig
     // Defualt: null (Unset) - Sink will use its own default behavior
     // 使用 Json 格式输出日志
     public bool? ToJson { get; init; } = null;
+
     // 使用颜色输出日志（仅适用于支持颜色的 IColorTextTarget， 如: ConsoleTarget）
     public bool? IsColor { get; init; } = null;
+
+    public TextOutputIncludeConfig? TextOutputIncludeConfig { get; init; } = null;
 
     /// <summary>
     /// 上下文前缀过滤器:
@@ -50,7 +53,7 @@ public record SinkOutputConfig
     /// <para>当 <see cref="IgnoreFilterCase"/> 为 true 时为 <see cref="StringComparison.OrdinalIgnoreCase"/>，
     /// 否则为 <see cref="StringComparison.Ordinal"/>。</para>
     /// </summary>
-    internal StringComparison ComparisonType => 
+    internal StringComparison ComparisonType =>
         IgnoreFilterCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     /// <summary>
@@ -62,4 +65,12 @@ public record SinkOutputConfig
     /// 允许记录的最高日志级别。
     /// </summary>
     public LogLevel LogMaxLevel { get; init; } = LogLevel.Critical;
+}
+
+public record class TextOutputIncludeConfig
+{
+    public bool IncludeTimestamp { get; init; } = true;
+    public bool IncludeLoggerName { get; init; } = true;
+    public bool IncludeLevel { get; init; } = true;
+    public bool IncludeContext { get; init; } = true;
 }

@@ -42,6 +42,7 @@ public class LogJsonWriterTests
     {
         var entry = new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
             logLevel: level,
             message: message,
@@ -399,5 +400,17 @@ public class LogJsonWriterTests
         props.GetProperty("A").GetString().Should().Be("x");
         props.GetProperty("B").GetInt32().Should().Be(2);
         props.GetProperty("C").GetBoolean().Should().BeTrue();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 12. LoggerName field
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WithLoggerName_ContainsLoggerNameField()
+    {
+        var entry = MakeEntry("msg"); // loggerName = "Test"
+        using var doc = RenderJson(entry);
+        doc.RootElement.GetProperty("LoggerName").GetString().Should().Be("Test");
     }
 }

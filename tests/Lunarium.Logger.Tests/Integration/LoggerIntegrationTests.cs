@@ -46,7 +46,7 @@ public class LoggerFixture : IAsyncDisposable
     public LoggerFixture()
     {
         ConcreteLogger = new LoggerBuilder()
-            .LoggerName("IntegrationTestLogger")
+            .SetLoggerName("IntegrationTestLogger")
             .AddSink(
                 new StringChannelTarget(GeneralChannel.Writer, isColor: false),
                 new SinkOutputConfig { LogMinLevel = LogLevel.Debug, LogMaxLevel = LogLevel.Critical })
@@ -250,6 +250,7 @@ public class ChannelTargetDirectTests
     {
         var entry = new LogEntry(
             loggerName: "DirectTest",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("DirectTest"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: msg,
@@ -288,6 +289,7 @@ public class ChannelTargetDirectTests
         var ts = DateTimeOffset.UtcNow;
         var entry = new LogEntry(
             loggerName: "Logger",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Logger"),
             timestamp: ts,
             logLevel: LogLevel.Error,
             message: "msg",

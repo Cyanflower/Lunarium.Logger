@@ -47,6 +47,7 @@ public class LogWriterTests
         var parsed = LogParser.ParseMessage(template);
         return new LogEntry(
             loggerName: "TestLogger",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: template,

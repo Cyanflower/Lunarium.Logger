@@ -39,6 +39,7 @@ public class WriterCoverageGapTests
         var parsed = LogParser.ParseMessage(template);
         return new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: level,
             message: template,

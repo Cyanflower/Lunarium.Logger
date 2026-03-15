@@ -35,6 +35,7 @@ public class SinkOutputConfigTests
         cfg.ContextFilterIncludes.Should().BeNull();
         cfg.ContextFilterExcludes.Should().BeNull();
         cfg.IgnoreFilterCase.Should().BeFalse();
+        cfg.TextOutputIncludeConfig.Should().BeNull();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

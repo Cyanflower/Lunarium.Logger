@@ -1,25 +1,25 @@
 Summary
-  Generated on: 2026/3/15 - 20:28:49
-  Coverage date: 2026/3/15 - 20:28:47 - 2026/3/15 - 20:28:48
+  Generated on: 2026/3/16 - 01:42:51
+  Coverage date: 2026/3/16 - 01:42:50 - 2026/3/16 - 01:42:51
   Parser: MultiReport (2x Cobertura)
   Assemblies: 1
-  Classes: 44
+  Classes: 45
   Files: 34
-  Line coverage: 91.2%
-  Covered lines: 2214
-  Uncovered lines: 212
-  Coverable lines: 2426
-  Total lines: 5582
-  Branch coverage: 87.9% (694 of 789)
-  Covered branches: 694
-  Total branches: 789
-  Method coverage: 98.8% (340 of 344)
-  Full method coverage: 86.6% (298 of 344)
-  Covered methods: 340
-  Fully covered methods: 298
-  Total methods: 344
+  Line coverage: 91.4%
+  Covered lines: 2287
+  Uncovered lines: 215
+  Coverable lines: 2502
+  Total lines: 5703
+  Branch coverage: 88.2% (703 of 797)
+  Covered branches: 703
+  Total branches: 797
+  Method coverage: 98.8% (356 of 360)
+  Full method coverage: 87.2% (314 of 360)
+  Covered methods: 356
+  Fully covered methods: 314
+  Total methods: 360
 
-Lunarium.Logger                                                   91.2%
+Lunarium.Logger                                                   91.4%
   Lunarium.Logger.DestructureHelper                               97.1%
   Lunarium.Logger.Extensions.LunariumLoggerConversionExtensions    100%
   Lunarium.Logger.Extensions.LunariumLoggerExtensions              100%
@@ -37,12 +37,12 @@ Lunarium.Logger                                                   91.2%
   Lunarium.Logger.Internal.BufferWriter                           90.7%
   Lunarium.Logger.Internal.LogChannelBridge<T>                     100%
   Lunarium.Logger.InternalLoggerUtils.InternalLogger              89.3%
-  Lunarium.Logger.Logger                                          83.1%
+  Lunarium.Logger.Logger                                          78.5%
   Lunarium.Logger.LoggerBuilder                                   81.8%
   Lunarium.Logger.LoggerBuilderExtensions                          100%
   Lunarium.Logger.LoggerExtensions                                 100%
   Lunarium.Logger.LogUtils                                         100%
-  Lunarium.Logger.Models.LogEntry                                 97.4%
+  Lunarium.Logger.Models.LogEntry                                 97.6%
   Lunarium.Logger.Parser.LogParser                                91.8%
   Lunarium.Logger.Parser.MessageTemplate                           100%
   Lunarium.Logger.Parser.PropertyToken                            97.4%
@@ -53,14 +53,15 @@ Lunarium.Logger                                                   91.2%
   Lunarium.Logger.SinkOutputConfig                                 100%
   Lunarium.Logger.Target.ByteChannelTarget                         100%
   Lunarium.Logger.Target.ChannelTarget<T>                          100%
-  Lunarium.Logger.Target.ConsoleTarget                            91.8%
+  Lunarium.Logger.Target.ConsoleTarget                            92.1%
   Lunarium.Logger.Target.DelegateChannelTarget<T>                  100%
-  Lunarium.Logger.Target.FileTarget                               78.1%
+  Lunarium.Logger.Target.FileTarget                               78.3%
   Lunarium.Logger.Target.LogEntryChannelTarget                     100%
   Lunarium.Logger.Target.StringChannelTarget                       100%
+  Lunarium.Logger.TextOutputIncludeConfig                          100%
   Lunarium.Logger.Wrapper.LoggerWrapper                            100%
-  Lunarium.Logger.Writer.LogColorTextWriter                         87%
-  Lunarium.Logger.Writer.LogJsonWriter                            92.6%
-  Lunarium.Logger.Writer.LogTextWriter                            98.3%
-  Lunarium.Logger.Writer.LogWriter                                83.1%
+  Lunarium.Logger.Writer.LogColorTextWriter                       87.6%
+  Lunarium.Logger.Writer.LogJsonWriter                            92.7%
+  Lunarium.Logger.Writer.LogTextWriter                            98.5%
+  Lunarium.Logger.Writer.LogWriter                                85.1%
   Lunarium.Logger.Writer.WriterPool                               90.3%

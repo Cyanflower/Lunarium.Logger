@@ -32,6 +32,7 @@ public class LoggerCoverageGapTests
     private static LogEntry MakeEntry(string msg = "hello") =>
         new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: DateTimeOffset.UtcNow,
             logLevel: LogLevel.Info,
             message: msg,

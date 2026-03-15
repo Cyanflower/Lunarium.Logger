@@ -64,7 +64,7 @@ internal sealed class Logger : ILogger, IAsyncDisposable
     {
         try
         {
-            await foreach (var logEntry in _queue.Reader.ReadAllAsync(_cancellationTokenSource.Token))
+            await foreach (var logEntry in _queue.Reader.ReadAllAsync(CancellationToken.None))
             {
                 // 解包
                 foreach (var sink in _sinks)
@@ -104,12 +104,13 @@ internal sealed class Logger : ILogger, IAsyncDisposable
     
             var entry = new LogEntry(
                 loggerName: _loggerName,
+                loggerNameBytes: _loggerNameBytes,
                 timestamp: LogTimestampConfig.GetTimestamp(),
                 logLevel: level,
                 message: message,
                 properties: propertyValues,
-                context: string.IsNullOrEmpty(context) ? _loggerName : context,
-                contextBytes: contextBytes.IsEmpty ? _loggerNameBytes : contextBytes,
+                context: context,
+                contextBytes: contextBytes,
                 scope: scope,
                 messageTemplate: LogParser.EmptyMessageTemplate,
                 exception: ex

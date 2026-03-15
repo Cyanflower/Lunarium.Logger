@@ -79,6 +79,19 @@ internal sealed class LogColorTextWriter : LogWriter
         return this;
     }
 
+    protected override LogColorTextWriter WriteLoggerName(ReadOnlyMemory<byte> loggerName)
+    {
+        if (!loggerName.IsEmpty)
+        {
+            _bufferWriter.Append(Prefix);
+            SetColor(ContextColor);
+            _bufferWriter.Append(loggerName.Span);
+            _bufferWriter.Append(Suffix);
+            _bufferWriter.Append(' ');
+        }
+        return this;
+    }
+
     protected override LogColorTextWriter WriteLevel(LogLevel level)
     {
         var levelStr = level switch
@@ -145,7 +158,7 @@ internal sealed class LogColorTextWriter : LogWriter
         if (exception != null)
         {
             _bufferWriter.AppendLine();
-            SetColor(ConsoleColor.Red);
+            SetColor(ExceptionColor);
             _bufferWriter.Append(exception.ToString()); // Explicit ToString to ensure Append(string) is called
             _bufferWriter.Append(AnsiReset);
         }

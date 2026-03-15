@@ -43,6 +43,7 @@ public class LogColorTextWriterTests
     {
         var entry = new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
             logLevel: level,
             message: message,
@@ -170,8 +171,15 @@ public class LogColorTextWriterTests
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // 4. Context
+    // 4. Context / LoggerName
     // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WithLoggerName_LoggerNameVisibleInStrippedOutput()
+    {
+        var entry = MakeEntry("msg"); // loggerName = "Test"
+        StripAnsi(Render(entry)).Should().Contain("Test");
+    }
 
     [Fact]
     public void Render_WithContext_ContextVisibleInStrippedOutput()
@@ -188,11 +196,30 @@ public class LogColorTextWriterTests
     }
 
     [Fact]
-    public void Render_EmptyContext_NoCyanCode()
+    public void Render_EmptyContext_EmptyLoggerName_NoCyanCode()
     {
-        var entry = MakeEntry("msg", context: "");
-        // No context block rendered — Cyan should not appear (only for context)
+        // Neither context nor logger name rendered → Cyan should not appear
+        var entry = new LogEntry(
+            loggerName: "",
+            loggerNameBytes: default,
+            timestamp: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            logLevel: LogLevel.Info,
+            message: "msg",
+            properties: [],
+            context: "",
+            contextBytes: default,
+            scope: "",
+            messageTemplate: LogParser.EmptyMessageTemplate);
+        entry.ParseMessage();
         Render(entry).Should().NotContain("\x1b[96m");
+    }
+
+    [Fact]
+    public void Render_EmptyContext_LoggerNameUsesCyanCode()
+    {
+        // Empty context but non-empty logger name — Cyan appears for logger name
+        var entry = MakeEntry("msg", context: "");
+        Render(entry).Should().Contain("\x1b[96m");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

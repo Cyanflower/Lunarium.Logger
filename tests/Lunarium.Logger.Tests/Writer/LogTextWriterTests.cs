@@ -40,6 +40,7 @@ public class LogTextWriterTests
     {
         var entry = new LogEntry(
             loggerName: "Test",
+            loggerNameBytes: System.Text.Encoding.UTF8.GetBytes("Test"),
             timestamp: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
             logLevel: level,
             message: message,
@@ -237,5 +238,97 @@ public class LogTextWriterTests
         var entry = MakeEntry("{{literal}}");
         var output = Render(entry);
         output.Should().Contain("{literal}");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 10. LoggerName rendering
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WithLoggerName_LoggerNameAppearsInBrackets()
+    {
+        var entry = MakeEntry("msg"); // loggerName = "Test"
+        var output = Render(entry);
+        output.Should().Contain("[Test]");
+    }
+
+    [Fact]
+    public void Render_EmptyLoggerName_NoLoggerNameBrackets()
+    {
+        var entry = new LogEntry(
+            loggerName: "",
+            loggerNameBytes: default,
+            timestamp: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            logLevel: LogLevel.Info,
+            message: "msg",
+            properties: [],
+            context: "",
+            contextBytes: default,
+            scope: "",
+            messageTemplate: LogParser.EmptyMessageTemplate);
+        entry.ParseMessage();
+        var output = Render(entry);
+        output.Should().NotMatchRegex(@"\[\]");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 11. Render with TextOutputIncludeConfig
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Render_WithConfigExcludeLoggerName_LoggerNameNotInOutput()
+    {
+        var entry = MakeEntry("msg"); // loggerName = "Test"
+        var writer = WriterPool.Get<LogTextWriter>();
+        try
+        {
+            writer.Render(entry, new TextOutputIncludeConfig { IncludeLoggerName = false });
+            var output = writer.ToString().TrimEnd('\r', '\n');
+            output.Should().NotContain("[Test]");
+            output.Should().Contain("msg");
+        }
+        finally { writer.Return(); }
+    }
+
+    [Fact]
+    public void Render_WithConfigExcludeTimestamp_TimestampNotInOutput()
+    {
+        var entry = MakeEntry("msg");
+        var writer = WriterPool.Get<LogTextWriter>();
+        try
+        {
+            writer.Render(entry, new TextOutputIncludeConfig { IncludeTimestamp = false });
+            var output = writer.ToString().TrimEnd('\r', '\n');
+            output.Should().NotContain("2026");
+        }
+        finally { writer.Return(); }
+    }
+
+    [Fact]
+    public void Render_WithConfigExcludeLevel_LevelNotInOutput()
+    {
+        var entry = MakeEntry("msg");
+        var writer = WriterPool.Get<LogTextWriter>();
+        try
+        {
+            writer.Render(entry, new TextOutputIncludeConfig { IncludeLevel = false });
+            var output = writer.ToString().TrimEnd('\r', '\n');
+            output.Should().NotContain("[INF]");
+        }
+        finally { writer.Return(); }
+    }
+
+    [Fact]
+    public void Render_WithConfigExcludeContext_ContextNotInOutput()
+    {
+        var entry = MakeEntry("msg", context: "MyService");
+        var writer = WriterPool.Get<LogTextWriter>();
+        try
+        {
+            writer.Render(entry, new TextOutputIncludeConfig { IncludeContext = false });
+            var output = writer.ToString().TrimEnd('\r', '\n');
+            output.Should().NotContain("[MyService]");
+        }
+        finally { writer.Return(); }
     }
 }
