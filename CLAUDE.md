@@ -127,6 +127,7 @@ src/Lunarium.Logger/
 │   └── LogChannelBridge.cs  # LogChannelBridge<T>（internal sealed，Channel 桥接器）
 │
 ├── Wrapper/
+│   ├── IContextProvider.cs  # IContextProvider（internal interface，GetContext()/GetContextSpan()，由 LoggerWrapper 实现）
 │   └── LoggerWrapper.cs     # LoggerWrapper（internal sealed，扁平化装饰器，Context/ContextBytes 构造时预计算）
 │
 ├── GlobalConfig/
@@ -178,14 +179,17 @@ void Log(LogLevel level, Exception? ex = null, string message = "", string conte
 - `scope`：由 MEL 适配器填充的作用域信息，业务代码无需手动提供
 - `Exception?`-first 重载：Debug/Info/Warning 新增 `(Exception? ex)` 和 `(Exception? ex, string message, params...)` 两个重载
 
-### ILogger.GetContext() / GetContextSpan()
+### IContextProvider（Wrapper/IContextProvider.cs）
 
 ```csharp
-string GetContext();
-ReadOnlyMemory<byte> GetContextSpan();
+internal interface IContextProvider
+{
+    internal string GetContext();
+    internal ReadOnlyMemory<byte> GetContextSpan();
+}
 ```
 
-供 `LoggerWrapper` 构造时读取上层 context、拼接并预编码 UTF-8。Logger 本身 `GetContext()` 返回空字符串，`GetContextSpan()` 返回 logger name 的 UTF-8 bytes。
+`GetContext()` 和 `GetContextSpan()` 已从 `ILogger` 接口移至 `IContextProvider`（internal interface），仅由 `LoggerWrapper` 实现。`LoggerWrapper` 构造时检查传入的 `ILogger` 是否为 `LoggerWrapper`（`is LoggerWrapper wrapper`），若是则直接调用 `wrapper.GetContext()` 拼接 context 路径；若不是（即根 Logger）则直接用传入的 context 字符串。
 
 ### LogEntry 字段
 

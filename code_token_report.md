@@ -1,0 +1,123 @@
+# 代码库 Token 分析报告
+
+- **总 Token 数量**: `117,468`
+- **统计范围**: 所有 `.cs` 文件
+- **排除规则**: `bin, .git, obj, .vs` 
+
+--- 
+
+## 目录与文件结构详情
+
+- 📁 **./** *(Total: `117,468`)* 
+  - 📁 **benchmarks/** *(Total: `6,212`)* 
+    - 📁 **Lunarium.Logger.Benchmarks/** *(Total: `6,212`)* 
+      - 📄 BenchmarkHelper.cs  (`193`)
+      - 📄 ChannelTargetBenchmarks.cs  (`919`)
+      - 📄 FilterBenchmarks.cs  (`1,323`)
+      - 📄 LogParserBenchmarks.cs  (`777`)
+      - 📄 LogWriterBenchmarks.cs  (`2,215`)
+      - 📄 LoggerThroughputBenchmarks.cs  (`748`)
+      - 📄 Program.cs  (`37`)
+  - 📁 **example/** *(Total: `4,196`)* 
+    - 📁 **RawCSharp/** *(Total: `4,196`)* 
+      - 📄 LoggerConfig.ZH.cs  (`4,196`)
+  - 📁 **src/** *(Total: `45,183`)* 
+    - 📁 **Lunarium.Logger/** *(Total: `45,183`)* 
+      - 📄 DestructureHelper.cs  (`1,088`)
+      - 📁 **Extensions/** *(Total: `1,240`)* 
+        - 📄 MicrosoftLoggingBridge.cs  (`1,240`)
+      - 📁 **Filter/** *(Total: `980`)* 
+        - 📄 Filter.cs  (`980`)
+      - 📁 **GlobalConfig/** *(Total: `2,716`)* 
+        - 📄 DestructuringConfig.cs  (`237`)
+        - 📄 GlobalConfigLock.cs  (`227`)
+        - 📄 JsonSerializationConfig.cs  (`927`)
+        - 📄 TimestampConfig.cs  (`584`)
+        - 📄 TimestampFormatConfig.cs  (`741`)
+      - 📄 GlobalConfigExtensions.cs  (`129`)
+      - 📄 GlobalConfigurator.cs  (`2,102`)
+      - 📄 GlobalUsings.cs  (`152`)
+      - 📄 IDestructurable.cs  (`283`)
+      - 📄 ILogger.cs  (`2,042`)
+      - 📄 ISinkConfig.cs  (`246`)
+      - 📁 **Internal/** *(Total: `3,066`)* 
+        - 📄 ArrayBufferWriter.cs  (`2,641`)
+        - 📄 LogChannelBridge.cs  (`425`)
+      - 📁 **InternalLoggerUtils/** *(Total: `731`)* 
+        - 📄 InternalLogger.cs  (`731`)
+      - 📄 LogLevel.cs  (`179`)
+      - 📄 LogSink.cs  (`521`)
+      - 📄 LogUtilsAPI.cs  (`287`)
+      - 📄 Logger.cs  (`1,300`)
+      - 📄 LoggerBuilder.cs  (`577`)
+      - 📄 LoggerBuilderExtensions.cs  (`2,396`)
+      - 📄 LoggerExtensions.cs  (`530`)
+      - 📁 **Models/** *(Total: `629`)* 
+        - 📄 LogEntry.cs  (`629`)
+      - 📁 **Parser/** *(Total: `5,396`)* 
+        - 📄 LogParser.cs  (`4,754`)
+        - 📄 MessageTemplate.cs  (`642`)
+      - 📁 **SinkConfig/** *(Total: `750`)* 
+        - 📄 ConsoleSinkConfig.cs  (`238`)
+        - 📄 FileSinkConfig.cs  (`512`)
+      - 📄 SinkOutputConfig.cs  (`613`)
+      - 📁 **Target/** *(Total: `5,286`)* 
+        - 📄 ChannelTarget.cs  (`1,050`)
+        - 📄 ConsoleTarget.cs  (`677`)
+        - 📄 FileTarget.cs  (`3,167`)
+        - 📄 ILogTarget.cs  (`392`)
+      - 📁 **Wrapper/** *(Total: `814`)* 
+        - 📄 LoggerWrapper.cs  (`814`)
+      - 📁 **Writer/** *(Total: `11,130`)* 
+        - 📄 LogColorTextWriter.cs  (`2,981`)
+        - 📄 LogJsonWriter.cs  (`3,288`)
+        - 📄 LogTextWriter.cs  (`707`)
+        - 📄 LogWriter.cs  (`3,554`)
+        - 📄 WriterPool.cs  (`600`)
+  - 📁 **tests/** *(Total: `60,711`)* 
+    - 📁 **Lunarium.Logger.IntegrationTests/** *(Total: `3,986`)* 
+      - 📁 **ConsoleSink/** *(Total: `1,103`)* 
+        - 📄 ConsoleSinkTests.cs  (`1,103`)
+      - 📁 **FileSink/** *(Total: `2,883`)* 
+        - 📄 FileSinkTests.cs  (`2,883`)
+    - 📁 **Lunarium.Logger.Tests/** *(Total: `56,725`)* 
+      - 📁 **Config/** *(Total: `3,732`)* 
+        - 📄 GlobalConfiguratorTests.cs  (`3,130`)
+        - 📄 SinkOutputConfigTests.cs  (`602`)
+      - 📁 **Core/** *(Total: `4,395`)* 
+        - 📄 InternalLoggerTests.cs  (`418`)
+        - 📄 LogUtilsTests.cs  (`376`)
+        - 📄 LoggerConcurrencyTests.cs  (`656`)
+        - 📄 LoggerCoreTests.cs  (`1,955`)
+        - 📄 LoggerCoverageGapTests.cs  (`990`)
+      - 📁 **Extensions/** *(Total: `2,668`)* 
+        - 📄 MicrosoftLoggingBridgeTests.cs  (`2,668`)
+      - 📁 **Filter/** *(Total: `2,108`)* 
+        - 📄 LoggerFilterTests.cs  (`2,108`)
+      - 📄 GlobalUsings.cs  (`21`)
+      - 📄 ILoggerDefaultMethodTests.cs  (`2,312`)
+      - 📁 **Integration/** *(Total: `2,985`)* 
+        - 📄 LoggerIntegrationTests.cs  (`2,985`)
+      - 📁 **Internal/** *(Total: `7,579`)* 
+        - 📄 BufferWriterTests.cs  (`3,378`)
+        - 📄 DestructureHelperTests.cs  (`4,201`)
+      - 📄 LogUtilsTests.cs  (`739`)
+      - 📄 LoggerExtensionsTests.cs  (`2,172`)
+      - 📁 **Models/** *(Total: `2,043`)* 
+        - 📄 LogConfigTests.cs  (`2,043`)
+      - 📁 **Parser/** *(Total: `3,363`)* 
+        - 📄 LogParserTests.cs  (`3,363`)
+      - 📁 **Target/** *(Total: `555`)* 
+        - 📄 ChannelTargetTests.cs  (`555`)
+      - 📁 **Wrapper/** *(Total: `1,494`)* 
+        - 📄 LoggerWrapperTests.cs  (`1,494`)
+      - 📁 **Writer/** *(Total: `20,559`)* 
+        - 📄 LogColorTextWriterTests.cs  (`3,648`)
+        - 📄 LogJsonWriterTests.cs  (`3,234`)
+        - 📄 LogTextWriterTests.cs  (`1,721`)
+        - 📄 LogWriterTests.cs  (`5,072`)
+        - 📄 WriterCoverageGapTests.cs  (`5,512`)
+        - 📄 WriterPoolTests.cs  (`1,372`)
+  - 📁 **tools/** *(Total: `1,166`)* 
+    - 📁 **TempAnalyzer/** *(Total: `1,166`)* 
+      - 📄 Program.cs  (`1,166`)

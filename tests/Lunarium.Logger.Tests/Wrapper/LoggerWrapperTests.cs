@@ -31,7 +31,6 @@ public class LoggerWrapperTests
     private static (ILogger mock, LoggerWrapper wrapper) MakeWrapper(string context)
     {
         var mock = Substitute.For<ILogger>();
-        mock.GetContext().Returns("");
         var wrapper = new LoggerWrapper(mock, context);
         return (mock, wrapper);
     }
@@ -101,7 +100,6 @@ public class LoggerWrapperTests
     public void Log_NestedWrappers_ContextPathBuiltCorrectly()
     {
         var innerMock = Substitute.For<ILogger>();
-        innerMock.GetContext().Returns("");
         var first = new LoggerWrapper(innerMock, "A");
         var second = new LoggerWrapper(first, "B");
 
@@ -112,7 +110,6 @@ public class LoggerWrapperTests
     public void Log_TripleNested_ContextPathBuiltCorrectly()
     {
         var innerMock = Substitute.For<ILogger>();
-        innerMock.GetContext().Returns("");
         var w1 = new LoggerWrapper(innerMock, "A");
         var w2 = new LoggerWrapper(w1, "B");
         var w3 = new LoggerWrapper(w2, "C");
@@ -178,7 +175,6 @@ public class LoggerWrapperTests
     public void GetContextSpan_NestedWrapper_DecodesToFullPath()
     {
         var innerMock = Substitute.For<ILogger>();
-        innerMock.GetContext().Returns("");
         var w1 = new LoggerWrapper(innerMock, "A");
         var w2 = new LoggerWrapper(w1, "B");
 

@@ -22,11 +22,6 @@ namespace Lunarium.Logger;
 /// </summary>
 public interface ILogger : IAsyncDisposable
 {
-
-    string GetContext();
-
-    ReadOnlyMemory<byte> GetContextSpan();
-
     /// <summary>
     /// 记录一条具有指定级别和详细信息的日志消息。
     /// 这是所有日志记录方法的基础实现。

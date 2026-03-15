@@ -225,30 +225,5 @@ public class LoggerCoreTests
         target2.Dispose();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // 9. Logger.GetContext / GetContextSpan
-    // ─────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void Logger_GetContext_ReturnsEmptyString()
-    {
-        var (logger, _) = MakeLogger(name: "MyLogger");
-        logger.GetContext().Should().Be("");
-    }
-
-    [Fact]
-    public void Logger_GetContextSpan_ReturnsLoggerNameBytes()
-    {
-        var (logger, _) = MakeLogger(name: "MyLogger");
-        var span = logger.GetContextSpan();
-        System.Text.Encoding.UTF8.GetString(span.Span).Should().Be("MyLogger");
-    }
-
-    [Fact]
-    public void Logger_GetContextSpan_EmptyName_ReturnsEmptyBytes()
-    {
-        var (logger, _) = MakeLogger(name: "");
-        logger.GetContextSpan().IsEmpty.Should().BeTrue();
-    }
 }
 

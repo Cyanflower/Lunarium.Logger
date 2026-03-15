@@ -33,9 +33,6 @@ public class ILoggerDefaultMethodTests
         public record LogCall(LogLevel Level, Exception? Ex, string Message, string Context, object?[] Props);
         public List<LogCall> Calls { get; } = [];
 
-        public string GetContext() => "";
-        public ReadOnlyMemory<byte> GetContextSpan() => ReadOnlyMemory<byte>.Empty;
-
         public void Log(LogLevel level, Exception? ex = null, string message = "", string context = "",
                         ReadOnlyMemory<byte> contextBytes = default, string scope = "", params object?[] propertyValues)
             => Calls.Add(new(level, ex, message, context, propertyValues));

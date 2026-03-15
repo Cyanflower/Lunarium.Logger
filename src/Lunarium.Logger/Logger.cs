@@ -57,16 +57,6 @@ internal sealed class Logger : ILogger, IAsyncDisposable
         _processTask = Task.Run(ProcessQueueAsync);
     }
 
-    public string GetContext()
-    {
-        return "";
-    }
-
-    public ReadOnlyMemory<byte> GetContextSpan()
-    {
-        return _loggerNameBytes;
-    }
-
     /// <summary>
     /// 在后台运行，持续从 Channel 中读取日志条目并分发给所有 Sink。
     /// </summary>

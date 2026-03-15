@@ -20,7 +20,7 @@ namespace Lunarium.Logger.Wrapper;
 /// 一个日志包装器（装饰器），用于为一个已存在的 ILogger 实例添加固定的上下文信息。
 /// 每次通过此包装器记录日志时，它都会自动附加这个上下文。
 /// </summary>
-internal sealed class LoggerWrapper : ILogger
+internal sealed class LoggerWrapper : ILogger, IContextProvider
 {
     // 引用被包装的日志实例或下一层包装器
     private readonly ILogger _logger;
@@ -36,9 +36,17 @@ internal sealed class LoggerWrapper : ILogger
     internal LoggerWrapper(ILogger logger, string context)
     {
         // 扁平化：始终持有 root logger，避免链式调用触发中间层 slow path
-        _logger = logger is LoggerWrapper w ? w._logger : logger;
-        var baseContext = logger.GetContext();
-        _context = string.IsNullOrEmpty(baseContext) ? context : $"{baseContext}.{context}";
+        if (logger is LoggerWrapper wrapper)
+        {
+            _logger = wrapper._logger; // 直接持有最底层的 Logger 实例，避免多层包装导致的性能问题，同时实现扁平化
+            _context = $"{wrapper.GetContext()}.{context}";
+        }
+        else
+        {
+            _logger = logger;
+            _context = context;
+        }
+
         _contextBytes = Encoding.UTF8.GetBytes(_context);
     }
 
