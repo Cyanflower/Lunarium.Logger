@@ -141,6 +141,70 @@ internal sealed class BufferWriter : IBufferWriter<byte>, IDisposable
     }
 
     /// <summary>
+    /// 字符串专用重载：绕过 string.Format，直接编码 UTF-8，避免中间字符串分配。
+    /// <list type="bullet">
+    ///   <item><c>"{0}"</c>：直接写入，零分配。</item>
+    ///   <item><c>"{0,N}"</c>（纯对齐，无格式化符）：手动补空格，零分配。</item>
+    ///   <item>其余格式（含 <c>:</c>）：回退到通用路径。</item>
+    /// </list>
+    /// </summary>
+    internal void AppendFormat(string format, string? value)
+    {
+        value ??= "";
+
+        // 快速路径："{0}"（最常见情况，直接写入）
+        if (format is "{0}")
+        {
+            AppendSpan(value.AsSpan());
+            return;
+        }
+
+        // 对齐路径："{0,N}" 或 "{0,-N}"（无格式化符号）
+        if (TryParseAlignmentFormat(format, out int alignment))
+        {
+            int padding = Math.Abs(alignment) - value.Length;
+            if (alignment > 0) // 右对齐：先补空格再写内容
+            {
+                if (padding > 0) AppendSpaces(padding);
+                AppendSpan(value.AsSpan());
+            }
+            else // 左对齐：先写内容再补空格
+            {
+                AppendSpan(value.AsSpan());
+                if (padding > 0) AppendSpaces(padding);
+            }
+            return;
+        }
+
+        // 回退：含格式化符（"{0:X}" 等），string 较少用但语法合法
+        Append(string.Format(CultureInfo.InvariantCulture, format, value));
+    }
+
+    /// <summary>
+    /// 尝试解析纯对齐格式字符串 <c>"{0,N}"</c>（不含 <c>:</c> 的情况）。
+    /// </summary>
+    private static bool TryParseAlignmentFormat(string format, out int alignment)
+    {
+        alignment = 0;
+        // 最短合法形式是 "{0,1}" = 6 个字符
+        if (format.Length < 6 || format[0] != '{' || format[1] != '0' || format[2] != ',' || format[^1] != '}')
+            return false;
+        var alignPart = format.AsSpan(3, format.Length - 4);
+        // 含冒号则有格式化符，不走此路径
+        if (alignPart.IndexOf(':') >= 0)
+            return false;
+        return int.TryParse(alignPart, out alignment);
+    }
+
+    /// <summary>向缓冲区写入 <paramref name="count"/> 个 ASCII 空格。</summary>
+    private void AppendSpaces(int count)
+    {
+        EnsureCapacity(count);
+        _buffer.AsSpan(_index, count).Fill((byte)' ');
+        _index += count;
+    }
+
+    /// <summary>
     /// 将 IUtf8SpanFormattable 直接格式化为 UTF-8 字节写入缓冲区，无中间字符串分配。
     /// 适用于 int/long/double/DateTimeOffset 等所有实现该接口的类型（.NET 8+）。
     /// </summary>

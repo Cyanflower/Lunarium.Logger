@@ -52,7 +52,9 @@ public class LoggerExtensionsTests
         var wrapped = logger.ForContext("SomeContext");
         wrapped.Info("hello");
         logger.Received(1).Log(
-            LogLevel.Info, "hello", "SomeContext", null);
+            LogLevel.Info, ex: null, message: "hello", context: "SomeContext",
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(), scope: Arg.Any<string>(),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -69,8 +71,10 @@ public class LoggerExtensionsTests
         // The context should be the full type name
         wrapped.Info("x");
         logger.Received(1).Log(
-            LogLevel.Info, "x",
-            typeof(LoggerExtensionsTests).FullName!, null);
+            LogLevel.Info, ex: null, message: "x",
+            context: typeof(LoggerExtensionsTests).FullName!,
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(), scope: Arg.Any<string>(),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     // ─────────────────────────────────────────────────────────────────────────

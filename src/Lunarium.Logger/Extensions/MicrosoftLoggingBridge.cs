@@ -103,7 +103,7 @@ internal sealed class LunariumMsLoggerAdapter : Microsoft.Extensions.Logging.ILo
 
         var scope = string.Join(".", scopeParts);
 
-        _lunariumLogger.Log(level: level, ex: exception, message: message, context: _lunariumLogger.GetContext(), scope: scope);
+        _lunariumLogger.Log(level: level, ex: exception, message: message, scope: scope);
     }
 
     private static Lunarium.Logger.LogLevel ConvertLogLevel(Microsoft.Extensions.Logging.LogLevel msLogLevel)

@@ -66,6 +66,8 @@ public class FileTargetTests : IDisposable
             message: message,
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.ParseMessage(message),
             exception: null
         );
@@ -143,6 +145,8 @@ public class FileTargetTests : IDisposable
             message: "Day 1",
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.ParseMessage("Day 1"),
             exception: null
         );
@@ -316,6 +320,8 @@ public class FileTargetTests : IDisposable
                 message: $"day {i}",
                 properties: [],
                 context: "",
+                contextBytes: default,
+                scope: "",
                 messageTemplate: LogParser.ParseMessage($"day {i}"));
             target.Emit(entry);
         }

@@ -47,6 +47,8 @@ public class LogJsonWriterTests
             message: message,
             properties: props ?? [],
             context: context,
+            contextBytes: System.Text.Encoding.UTF8.GetBytes(context),
+            scope: "",
             messageTemplate: LogParser.EmptyMessageTemplate,
             exception: ex);
         entry.ParseMessage();
@@ -95,7 +97,7 @@ public class LogJsonWriterTests
 
     [Theory]
     [InlineData(LogLevel.Debug, "Debug", 0)]
-    [InlineData(LogLevel.Info, "Info", 1)]
+    [InlineData(LogLevel.Info, "Information", 1)]
     [InlineData(LogLevel.Warning, "Warning", 2)]
     [InlineData(LogLevel.Error, "Error", 3)]
     [InlineData(LogLevel.Critical, "Critical", 4)]

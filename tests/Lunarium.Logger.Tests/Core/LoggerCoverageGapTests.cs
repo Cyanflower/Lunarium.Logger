@@ -37,6 +37,8 @@ public class LoggerCoverageGapTests
             message: msg,
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.ParseMessage(msg));
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -63,8 +65,8 @@ public class LoggerCoverageGapTests
 
         // Log two entries — first entry lets the throwing sink explode,
         // second entry is proof the logger kept working
-        logger.Log(LogLevel.Info, "first");
-        logger.Log(LogLevel.Info, "marker-ok");
+        logger.Log(LogLevel.Info, message: "first");
+        logger.Log(LogLevel.Info, message: "marker-ok");
 
         // Wait for the "marker-ok" to reach the channel
         string? got = null;
@@ -116,7 +118,7 @@ public class LoggerCoverageGapTests
         var ch = Channel.CreateUnbounded<string>();
         var target = new StringChannelTarget(ch.Writer, isColor: false);
         var logger = new Logger([new(target, new SinkOutputConfig())], "DisposeOk");
-        logger.Log(LogLevel.Info, "before dispose");
+        logger.Log(LogLevel.Info, message: "before dispose");
 
         Func<Task> act = async () => await logger.DisposeAsync();
         await act.Should().NotThrowAsync();

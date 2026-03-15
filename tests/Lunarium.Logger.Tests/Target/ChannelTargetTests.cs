@@ -32,6 +32,8 @@ public class ChannelTargetTests
             message: msg,
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.ParseMessage(msg));
 
     [Fact]

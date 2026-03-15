@@ -1,3 +1,17 @@
+// Copyright 2026 Cyanflower
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 using BenchmarkDotNet.Attributes;
 using Lunarium.Logger.Models;
 using Lunarium.Logger.Parser;
@@ -18,12 +32,22 @@ namespace Lunarium.Logger.Benchmarks;
 [MemoryDiagnoser]
 public class LogWriterBenchmarks
 {
+    // IDestructured 实现：预序列化字节，静态单例，零分配
+    private sealed class CachedPayload : IDestructured
+    {
+        public static readonly CachedPayload Instance = new();
+        private static readonly ReadOnlyMemory<byte> _bytes =
+            "{\"Id\":1,\"Name\":\"Test\",\"Tags\":[\"tag1\",\"tag2\"]}"u8.ToArray();
+        public ReadOnlyMemory<byte> Destructured() => _bytes;
+    }
+
     private LogEntry _entryPlainText = null!;
     private LogEntry _entrySingleProp = null!;
     private LogEntry _entryMultiProp = null!;
     private LogEntry _entryWithFormatAlign = null!;
     private LogEntry _entryNumeric = null!;
     private LogEntry _entryComplex = null!;
+    private LogEntry _entryIDestructured = null!;
 
     [GlobalSetup]
     public void Setup()
@@ -96,6 +120,17 @@ public class LogWriterBenchmarks
             contextBytes: "API"u8.ToArray(),
             scope: "",
             messageTemplate: LogParser.ParseMessage("Request context: {@Payload}"));
+
+        _entryIDestructured = new LogEntry(
+            loggerName: "Bench",
+            timestamp: ts,
+            logLevel: LogLevel.Info,
+            message: "Request context: {@Payload}",
+            properties: new object?[] { CachedPayload.Instance },
+            context: "API",
+            contextBytes: "API"u8.ToArray(),
+            scope: "",
+            messageTemplate: LogParser.ParseMessage("Request context: {@Payload}"));
     }
 
     // ==================== LogTextWriter ====================
@@ -158,6 +193,22 @@ public class LogWriterBenchmarks
         finally { w.Return(); }
     }
 
+    [Benchmark(Description = "Color: 对齐 + 格式化 ({Count,8:D} {Percent:P1})")]
+    public void Color_AlignmentAndFormat()
+    {
+        var w = WriterPool.Get<LogColorTextWriter>();
+        try { w.Render(_entryWithFormatAlign); w.FlushTo(Stream.Null); }
+        finally { w.Return(); }
+    }
+
+    [Benchmark(Description = "Color: Numeric/Formattable (int, DateTimeOffset, TimeSpan)")]
+    public void Color_Numeric()
+    {
+        var w = WriterPool.Get<LogColorTextWriter>();
+        try { w.Render(_entryNumeric); w.FlushTo(Stream.Null); }
+        finally { w.Return(); }
+    }
+
     // ==================== LogJsonWriter ====================
 
     [Benchmark(Description = "JSON: 单属性（含 RenderedMessage + Propertys 字段）")]
@@ -184,11 +235,19 @@ public class LogWriterBenchmarks
         finally { w.Return(); }
     }
 
-    [Benchmark(Description = "JSON: Complex Object (@Destructure)")]
+    [Benchmark(Description = "JSON: {@Payload} 匿名类型（JsonSerializer.Serialize 回退路径）")]
     public void Json_ComplexObject()
     {
         var w = WriterPool.Get<LogJsonWriter>();
         try { w.Render(_entryComplex); w.FlushTo(Stream.Null); }
+        finally { w.Return(); }
+    }
+
+    [Benchmark(Description = "JSON: {@Payload} IDestructured（预序列化字节，WriteRawValue 零分配路径）")]
+    public void Json_Destructure_IDestructured()
+    {
+        var w = WriterPool.Get<LogJsonWriter>();
+        try { w.Render(_entryIDestructured); w.FlushTo(Stream.Null); }
         finally { w.Return(); }
     }
 

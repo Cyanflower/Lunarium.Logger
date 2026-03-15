@@ -59,6 +59,8 @@ public class ConsoleSinkTests : IDisposable
             message: message,
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.ParseMessage(message),
             exception: null
         );

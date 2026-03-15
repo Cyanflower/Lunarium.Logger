@@ -35,8 +35,6 @@ public class LoggerConcurrencyTests
     {
         GlobalConfigLock.Configured = false;
         _isConfiguringField?.SetValue(null, false);
-        AtomicOpsConfig.DisableBufferWriterInterlocked();
-        SafetyClearConfig.DisableSafetyClear();
         GlobalConfigurator.ApplyDefaultIfNotConfigured();
     }
 
@@ -94,36 +92,4 @@ public class LoggerConcurrencyTests
         receivedIds.Count.Should().Be(taskCount, "all messages should be received");
     }
 
-#if DEBUG
-    [Fact]
-    public async Task Log_ConcurrentCalls_NoDoubleArrayPoolReturn()
-    {
-        // Reset global config state
-        GlobalConfigLock.Configured = false;
-        _isConfiguringField?.SetValue(null, false);
-
-        // Configure with safety options enabled
-        AtomicOpsConfig.EnableBufferWriterInterlocked();
-        SafetyClearConfig.EnableSafetyClear();
-        GlobalConfigurator.Configure().Apply();
-
-        BufferWriterDiagnostics.Clear();
-
-        var (logger, ch) = MakeLogger();
-        const int taskCount = 1000;
-
-        var tasks = Enumerable.Range(0, taskCount)
-            .Select(i => Task.Run(() => logger.Info("Safety test {Id}", i)));
-
-        await Task.WhenAll(tasks);
-        await logger.DisposeAsync();
-
-        BufferWriterDiagnostics.HasAnyDoubleReturn().Should().BeFalse(
-            "no BufferWriter should have ArrayPool.Return called more than once");
-
-        // Reset to default state
-        AtomicOpsConfig.DisableBufferWriterInterlocked();
-        SafetyClearConfig.DisableSafetyClear();
-    }
-#endif
 }

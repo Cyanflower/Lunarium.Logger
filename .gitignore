@@ -485,5 +485,5 @@ $RECYCLE.BIN/
 # Utils
 AutoAddLicenseHeader.py
 TestResults/
-CoverageReport/html/
+CoverageReport/html/*
 .agent-history

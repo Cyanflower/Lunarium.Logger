@@ -255,6 +255,8 @@ public class ChannelTargetDirectTests
             message: msg,
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.ParseMessage(msg));
         entry.ParseMessage();
         return entry;
@@ -284,7 +286,16 @@ public class ChannelTargetDirectTests
         var ch = Channel.CreateUnbounded<LogEntry>();
         var target = new LogEntryChannelTarget(ch.Writer);
         var ts = DateTimeOffset.UtcNow;
-        var entry = new LogEntry("Logger", ts, LogLevel.Error, "msg", [], "Ctx", LogParser.ParseMessage("msg"));
+        var entry = new LogEntry(
+            loggerName: "Logger",
+            timestamp: ts,
+            logLevel: LogLevel.Error,
+            message: "msg",
+            properties: [],
+            context: "Ctx",
+            contextBytes: default,
+            scope: "",
+            messageTemplate: LogParser.ParseMessage("msg"));
 
         target.Emit(entry);
 

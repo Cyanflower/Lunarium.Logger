@@ -48,6 +48,8 @@ public class LogColorTextWriterTests
             message: message,
             properties: props ?? [],
             context: context,
+            contextBytes: System.Text.Encoding.UTF8.GetBytes(context),
+            scope: "",
             messageTemplate: LogParser.EmptyMessageTemplate,
             exception: ex);
         entry.ParseMessage();

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using Lunarium.Logger.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using LmLogLevel = Lunarium.Logger.LogLevel;
@@ -71,10 +72,12 @@ public class MicrosoftLoggingBridgeTests
         // We check the inner mock received the right level.
         mock.Received().Log(
             expectedLmLevel,
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            null,
-            Arg.Any<object?[]>());
+            ex: null,
+            message: Arg.Any<string>(),
+            context: Arg.Any<string>(),
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(),
+            scope: Arg.Any<string>(),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -92,10 +95,12 @@ public class MicrosoftLoggingBridgeTests
 
         mock.Received().Log(
             LmLogLevel.Info,
-            "Hello world",
-            Arg.Any<string>(),
-            null,
-            Arg.Any<object?[]>());
+            ex: null,
+            message: "Hello world",
+            context: Arg.Any<string>(),
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(),
+            scope: Arg.Any<string>(),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -114,10 +119,12 @@ public class MicrosoftLoggingBridgeTests
 
         mock.Received().Log(
             LmLogLevel.Error,
-            Arg.Any<string>(),
-            Arg.Any<string>(),
-            ex,
-            Arg.Any<object?[]>());
+            ex: ex,
+            message: Arg.Any<string>(),
+            context: Arg.Any<string>(),
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(),
+            scope: Arg.Any<string>(),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -155,10 +162,12 @@ public class MicrosoftLoggingBridgeTests
 
         mock.Received().Log(
             LmLogLevel.Info,
-            Arg.Any<string>(),
-            Arg.Is<string>(ctx => ctx.Contains("MyEvent")),
-            null,
-            Arg.Any<object?[]>());
+            ex: null,
+            message: Arg.Any<string>(),
+            context: Arg.Any<string>(),
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(),
+            scope: Arg.Is<string>(s => s.Contains("MyEvent")),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     [Fact]
@@ -172,10 +181,12 @@ public class MicrosoftLoggingBridgeTests
 
         mock.Received().Log(
             LmLogLevel.Warning,
-            Arg.Any<string>(),
-            Arg.Is<string>(ctx => ctx.Contains("42")),
-            null,
-            Arg.Any<object?[]>());
+            ex: null,
+            message: Arg.Any<string>(),
+            context: Arg.Any<string>(),
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(),
+            scope: Arg.Is<string>(s => s.Contains("42")),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     [Fact]
@@ -190,10 +201,12 @@ public class MicrosoftLoggingBridgeTests
         // context should not contain "0" from EventId (Id=0 and Name=null are both skipped)
         mock.Received().Log(
             LmLogLevel.Info,
-            Arg.Any<string>(),
-            Arg.Is<string>(ctx => !ctx.EndsWith(".0")),
-            null,
-            Arg.Any<object?[]>());
+            ex: null,
+            message: Arg.Any<string>(),
+            context: Arg.Is<string>(ctx => !ctx.EndsWith(".0")),
+            contextBytes: Arg.Any<ReadOnlyMemory<byte>>(),
+            scope: Arg.Any<string>(),
+            propertyValues: Arg.Any<object?[]>());
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -287,5 +300,25 @@ public class MicrosoftLoggingBridgeTests
         var msLogger = provider.CreateLogger("Cat");
 
         msLogger.IsEnabled(MsLogLevel.None).Should().BeTrue();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 12. LunariumLoggerExtensions.AddLunariumLogger — registers provider, returns builder
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void AddLunariumLogger_RegistersProviderAndReturnsSameBuilder()
+    {
+        var lunariumMock = Substitute.For<Lunarium.Logger.ILogger>();
+        var builderMock = Substitute.For<ILoggingBuilder>();
+        var servicesMock = Substitute.For<IServiceCollection>();
+        builderMock.Services.Returns(servicesMock);
+
+        var result = builderMock.AddLunariumLogger(lunariumMock);
+
+        // Returns the same builder for chaining
+        result.Should().BeSameAs(builderMock);
+        // AddProvider is an extension that calls builder.Services; verify Services was accessed
+        _ = builderMock.Received().Services;
     }
 }

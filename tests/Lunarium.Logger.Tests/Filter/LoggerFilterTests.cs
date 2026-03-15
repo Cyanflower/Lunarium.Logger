@@ -37,6 +37,8 @@ public class LoggerFilterTests
             message: "test",
             properties: [],
             context: context,
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.EmptyMessageTemplate,
             exception: null);
 

@@ -228,7 +228,11 @@ internal sealed class LogColorTextWriter : LogWriter
 
             // 构建格式字符串，支持对齐和格式化
             SetValueColor(value);
-            _bufferWriter.AppendFormat(propertyToken.FormatString, value);
+            // string 专用重载：跳过 string.Format，直接 UTF-8 编码
+            if (value is string strValue)
+                _bufferWriter.AppendFormat(propertyToken.FormatString, strValue);
+            else
+                _bufferWriter.AppendFormat(propertyToken.FormatString, value);
             _bufferWriter.Append(AnsiReset);
         }
         catch (Exception ex)

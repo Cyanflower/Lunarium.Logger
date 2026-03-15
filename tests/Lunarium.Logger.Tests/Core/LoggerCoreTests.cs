@@ -68,7 +68,7 @@ public class LoggerCoreTests
         var (logger, ch) = MakeLogger();
         var id = Guid.NewGuid().ToString("N")[..8];
 
-        logger.Log(LogLevel.Info, $"Hello {id}");
+        logger.Log(LogLevel.Info, message: $"Hello {id}");
 
         var result = await ReadWithTimeoutAsync(ch, id);
         result.Should().NotBeNull();
@@ -89,7 +89,7 @@ public class LoggerCoreTests
 
         var id = Guid.NewGuid().ToString("N")[..8];
         // Should not throw; the message should simply be dropped
-        logger.Log(LogLevel.Error, $"Should not appear {id}");
+        logger.Log(LogLevel.Error, message: $"Should not appear {id}", ex: null);
 
         await Task.Delay(200);
         var result = await ReadWithTimeoutAsync(ch, id, timeoutMs: 200);
@@ -104,7 +104,7 @@ public class LoggerCoreTests
     public async Task Logger_DisposeAsync_CompletesWithoutException()
     {
         var (logger, _) = MakeLogger();
-        logger.Log(LogLevel.Info, "Pre-dispose message");
+        logger.Log(LogLevel.Info, message: "Pre-dispose message");
         // DisposeAsync should not throw
         var act = async () => await logger.DisposeAsync();
         await act.Should().NotThrowAsync();
@@ -147,7 +147,7 @@ public class LoggerCoreTests
         };
         var logger = new Logger(sinks, "MultiSink");
         var id = Guid.NewGuid().ToString("N")[..8];
-        logger.Log(LogLevel.Info, $"Multi {id}");
+        logger.Log(LogLevel.Info, message: $"Multi {id}");
 
         var r1 = await ReadWithTimeoutAsync(ch1, id);
         var r2 = await ReadWithTimeoutAsync(ch2, id);
@@ -198,8 +198,8 @@ public class LoggerCoreTests
         logger1.Should().NotBeSameAs(logger2);
 
         var id = Guid.NewGuid().ToString("N")[..8];
-        logger1.Log(LogLevel.Info, $"L1-{id}");
-        logger2.Log(LogLevel.Info, $"L2-{id}");
+        logger1.Log(LogLevel.Info, message: $"L1-{id}");
+        logger2.Log(LogLevel.Info, message: $"L2-{id}");
 
         var r1 = await ReadWithTimeoutAsync(ch1, $"L1-{id}");
         var r2 = await ReadWithTimeoutAsync(ch2, $"L2-{id}");
@@ -223,6 +223,32 @@ public class LoggerCoreTests
 
         var target2 = new FileTarget(path);
         target2.Dispose();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 9. Logger.GetContext / GetContextSpan
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Logger_GetContext_ReturnsEmptyString()
+    {
+        var (logger, _) = MakeLogger(name: "MyLogger");
+        logger.GetContext().Should().Be("");
+    }
+
+    [Fact]
+    public void Logger_GetContextSpan_ReturnsLoggerNameBytes()
+    {
+        var (logger, _) = MakeLogger(name: "MyLogger");
+        var span = logger.GetContextSpan();
+        System.Text.Encoding.UTF8.GetString(span.Span).Should().Be("MyLogger");
+    }
+
+    [Fact]
+    public void Logger_GetContextSpan_EmptyName_ReturnsEmptyBytes()
+    {
+        var (logger, _) = MakeLogger(name: "");
+        logger.GetContextSpan().IsEmpty.Should().BeTrue();
     }
 }
 

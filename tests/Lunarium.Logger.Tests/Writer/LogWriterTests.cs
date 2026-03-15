@@ -52,6 +52,8 @@ public class LogWriterTests
             message: template,
             properties: props,
             context: context,
+            contextBytes: System.Text.Encoding.UTF8.GetBytes(context),
+            scope: "",
             messageTemplate: parsed,
             exception: ex);
     }
@@ -544,7 +546,7 @@ public class LogWriterTests
 
     [Theory]
     [InlineData(LogLevel.Debug, "Debug")]
-    [InlineData(LogLevel.Info, "Info")]
+    [InlineData(LogLevel.Info, "Information")]
     [InlineData(LogLevel.Warning, "Warning")]
     [InlineData(LogLevel.Error, "Error")]
     [InlineData(LogLevel.Critical, "Critical")]

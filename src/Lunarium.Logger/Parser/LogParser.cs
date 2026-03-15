@@ -45,7 +45,7 @@ internal enum PropertyState
 
 internal static class LogParser
 {
-    internal static MessageTemplate EmptyMessageTemplate = new([]);
+    internal static MessageTemplate EmptyMessageTemplate = new([], ReadOnlyMemory<byte>.Empty);
     private const int CacheMaxCountLimit = 4096;
     private static int _cacheCount = 0;
 
@@ -292,7 +292,7 @@ internal static class LogParser
                 mergedToken.Add(new TextToken(mergeBuffer.ToString()));
             }
 
-            return new MessageTemplate(mergedToken.ToArray());
+            return new MessageTemplate(mergedToken.ToArray(), Encoding.UTF8.GetBytes(message));
         }
         catch (Exception ex)
         {

@@ -49,14 +49,6 @@ public class GlobalConfiguratorTests
         typeof(JsonSerializationConfig).GetField("_options",
             BindingFlags.Static | BindingFlags.NonPublic);
 
-    private static readonly FieldInfo? _bufferWriterInterlockedField =
-        typeof(AtomicOpsConfig).GetField("BufferWriterDisposeInterlocked",
-            BindingFlags.Static | BindingFlags.NonPublic);
-
-    private static readonly FieldInfo? _safetyClearField =
-        typeof(SafetyClearConfig).GetField("SafetyClear",
-            BindingFlags.Static | BindingFlags.NonPublic);
-
     /// <summary>
     /// Reset ALL static guard state so Configure() is allowed again.
     /// Must be called at the START of every test (and optionally at the end for hygiene).
@@ -67,8 +59,6 @@ public class GlobalConfiguratorTests
         _isConfiguringField?.SetValue(null, false);
         _customResolverField?.SetValue(null, null);
         _optionsField?.SetValue(null, null);
-        _bufferWriterInterlockedField?.SetValue(null, false);
-        _safetyClearField?.SetValue(null, false);
         // Reset JsonSerializationConfig to defaults
         JsonSerializationConfig.ConfigPreserveChineseCharacters(true);
         JsonSerializationConfig.ConfigWriteIndented(false);
@@ -460,67 +450,6 @@ public class GlobalConfiguratorTests
         ResetAll();
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // 12. BufferWriterInterlocked and SafetyClear configuration
-    // ─────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public void EnableBufferWriterInterlocked_SetsFlagTrue()
-    {
-        ResetAll();
-        AtomicOpsConfig.EnableBufferWriterInterlocked();
-        GlobalConfigurator.Configure().Apply();
-        AtomicOpsConfig.BufferWriterDisposeInterlocked.Should().BeTrue();
-        ResetAll();
-    }
-
-    [Fact]
-    public void DisableBufferWriterInterlocked_SetsFlagFalse()
-    {
-        ResetAll();
-        AtomicOpsConfig.EnableBufferWriterInterlocked();
-        AtomicOpsConfig.DisableBufferWriterInterlocked();
-        GlobalConfigurator.Configure().Apply();
-        AtomicOpsConfig.BufferWriterDisposeInterlocked.Should().BeFalse();
-        ResetAll();
-    }
-
-    [Fact]
-    public void EnableSafetyClear_SetsFlagTrue()
-    {
-        ResetAll();
-        SafetyClearConfig.EnableSafetyClear();
-        GlobalConfigurator.Configure().Apply();
-        SafetyClearConfig.SafetyClear.Should().BeTrue();
-        ResetAll();
-    }
-
-    [Fact]
-    public void DisableSafetyClear_SetsFlagFalse()
-    {
-        ResetAll();
-        SafetyClearConfig.EnableSafetyClear();
-        SafetyClearConfig.DisableSafetyClear();
-        GlobalConfigurator.Configure().Apply();
-        SafetyClearConfig.SafetyClear.Should().BeFalse();
-        ResetAll();
-    }
-
-    [Fact]
-    public void Config_SafetyAndInterlocked_ChainedCorrectly()
-    {
-        ResetAll();
-        AtomicOpsConfig.EnableBufferWriterInterlocked();
-        SafetyClearConfig.EnableSafetyClear();
-        GlobalConfigurator.Configure()
-            .UseUtcTimeZone()
-            .Apply();
-
-        AtomicOpsConfig.BufferWriterDisposeInterlocked.Should().BeTrue();
-        SafetyClearConfig.SafetyClear.Should().BeTrue();
-        LogTimestampConfig.GetTimestamp().Offset.Should().Be(TimeSpan.Zero);
-        ResetAll();
-    }
 }
 
 [JsonSerializable(typeof(string))]

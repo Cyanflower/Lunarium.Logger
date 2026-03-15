@@ -58,6 +58,8 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
   **LogColorTextWriter（带 ANSI 颜色的文本格式）**
   - `Color_SingleProperty`：单属性渲染，相比 `Text_SingleProperty` 测量 ANSI 转义码插入的额外开销。
   - `Color_MultiProperty`：四属性渲染，多属性场景下颜色代码拼接的综合开销。
+  - `Color_AlignmentAndFormat`：验证带颜色输出时，手动对齐逻辑与转义码插入的组合性能。
+  - `Color_Numeric`：验证数值类型在带颜色路径下的 `IUtf8SpanFormattable` 零分配渲染。
 
   **LogJsonWriter（JSON 格式）**
   - `Json_SingleProperty`：单属性 JSON 渲染，基于 `Utf8JsonWriter` 测量核心序列化开销。
@@ -68,6 +70,20 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
   **WriterPool 对象池收益**
   - `Pool_GetAndReturn`：`WriterPool.Get<LogTextWriter>()` + `WriterPool.Return()` 的往返开销（池化路径），测量 `ConcurrentBag.TryTake` 与 `Add` 的代价。
   - `Alloc_NewWriter`：`new LogTextWriter()` 直接分配（不归还），通过 `[MemoryDiagnoser]` 的 `Allocated` 列量化池化节省的堆分配。
+
+  > **注**：`Json_ComplexObject` 和 `Json_Destructure_IDestructured` 使用相同的 `{@Payload}` 模板，属性值分别为匿名类型（走 `JsonSerializer.Serialize` 回退路径）和 `IDestructured` 实现（静态单例，预序列化字节，走 `WriteRawValue` 零分配路径），两者对比可直接量化自定义解构接口的性能收益。
+
+---
+
+## ChannelTargetBenchmarks.cs
+
+- **目标类**: `LogEntryChannelTarget`、`ByteChannelTarget`、`StringChannelTarget`（均为 `Lunarium.Logger.Target`）
+- **测量目标**: `ChannelTarget<T>.Emit(LogEntry)` 的完整开销（包含渲染 + 编码 + Channel TryWrite）
+- **架构背景**: 三个变体的核心差异在 `Transform()` 实现：`LogEntryChannelTarget` 直接返回传入引用（零编码）；`ByteChannelTarget` 渲染后调用 `GetWrittenBytes()` / `ToArray()`（一次 byte[] 拷贝）；`StringChannelTarget` 渲染后调用 `ToString()` / `Encoding.UTF8.GetString`（UTF-8→string 解码）。所有变体使用无界 Channel，`TryWrite` 始终成功，排除背压干扰。`GlobalCleanup` 中 `Dispose` 各 Target 完成 Channel，不等待排空。
+- **主要 Benchmark 场景**:
+  - `Emit_LogEntry`（基准线）：`LogEntryChannelTarget` 传递 `LogEntry` 引用，无渲染无编码，测量最小基线开销。
+  - `Emit_ByteArray`：`ByteChannelTarget` 渲染 + `ToArray()` byte[] 拷贝，通过 `[MemoryDiagnoser]` 的 `Allocated` 列量化 byte[] 分配成本，相比 `Emit_String` 跳过 UTF-16 字符串解码。
+  - `Emit_String`：`StringChannelTarget` 渲染 + `Encoding.UTF8.GetString` UTF-8→string 解码，产生额外 string 堆分配，与 `Emit_ByteArray` 对比可量化 UTF-16 解码的开销。
 
 ---
 

@@ -231,6 +231,8 @@ public class LogConfigTests
             message: msg,
             properties: [],
             context: "",
+            contextBytes: default,
+            scope: "",
             messageTemplate: LogParser.EmptyMessageTemplate);
 
     [Fact]

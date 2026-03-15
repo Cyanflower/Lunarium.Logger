@@ -59,7 +59,7 @@ internal sealed class Logger : ILogger, IAsyncDisposable
 
     public string GetContext()
     {
-        return _loggerName;
+        return "";
     }
 
     public ReadOnlyMemory<byte> GetContextSpan()

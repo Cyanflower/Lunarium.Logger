@@ -106,7 +106,7 @@ internal sealed class LogJsonWriter : LogWriter
                 _jsonWriter.WriteNumber(TimestampKey, timestamp.ToUnixTimeMilliseconds());
                 break;
             case JsonTimestampMode.ISO8601:
-                Span<byte> isoBuffer = stackalloc byte[32];
+                Span<byte> isoBuffer = stackalloc byte[64];
                 if (timestamp.TryFormat(isoBuffer, out int writtenIso, "O", CultureInfo.InvariantCulture))
                 {
                     _jsonWriter.WriteString(TimestampKey, isoBuffer[..writtenIso]);
@@ -221,7 +221,11 @@ internal sealed class LogJsonWriter : LogWriter
             }
 
             // 构建格式字符串，支持对齐和格式化
-            _scratchWriter.AppendFormat(propertyToken.FormatString, value);
+            // string 专用重载：跳过 string.Format，直接 UTF-8 编码
+            if (value is string strValue)
+                _scratchWriter.AppendFormat(propertyToken.FormatString, strValue);
+            else
+                _scratchWriter.AppendFormat(propertyToken.FormatString, value);
         }
         catch (Exception ex)
         {

@@ -30,44 +30,10 @@ public record MessageTemplate
     internal readonly ReadOnlyMemory<byte> OriginalMessageBytes;
 
 
-    internal MessageTemplate(MessageTemplateTokens[] messageTemplateTokens)
+    internal MessageTemplate(MessageTemplateTokens[] messageTemplateTokens, ReadOnlyMemory<byte> originalMessageBytes)
     {
         MessageTemplateTokens = messageTemplateTokens;
-        OriginalMessageBytes = BuildOriginalMessage(messageTemplateTokens);
-    }
-
-    private static ReadOnlyMemory<byte> BuildOriginalMessage(IReadOnlyList<MessageTemplateTokens> tokens)
-    {
-        int count = 0;
-        foreach (var token in tokens)
-        {
-            switch (token)
-            {
-                case TextToken textToken:
-                    count += textToken.TextBytes.Length;
-                    break;
-                case PropertyToken propertyToken:
-                    count += propertyToken.RawText.TextBytes.Length;
-                    break;
-            }
-        }
-        byte[] bytes = new byte[count];
-        int index = 0;
-        foreach (var token in tokens)
-        {
-            switch (token)
-            {
-                case TextToken textToken:
-                    textToken.TextBytes.CopyTo(bytes[index..]);
-                    index += textToken.TextBytes.Length;
-                    break;
-                case PropertyToken propertyToken:
-                    propertyToken.RawText.TextBytes.CopyTo(bytes[index..]);
-                    index += propertyToken.RawText.TextBytes.Length;
-                    break;
-            }
-        }
-        return bytes;
+        OriginalMessageBytes = originalMessageBytes;
     }
 }
 

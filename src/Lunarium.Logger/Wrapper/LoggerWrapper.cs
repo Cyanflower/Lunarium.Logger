@@ -35,8 +35,10 @@ internal sealed class LoggerWrapper : ILogger
     /// <param name="context">要与此包装器关联的上下文信息。</param>
     internal LoggerWrapper(ILogger logger, string context)
     {
-        _logger = logger;
-        _context = $"{logger.GetContext()}.{context}";
+        // 扁平化：始终持有 root logger，避免链式调用触发中间层 slow path
+        _logger = logger is LoggerWrapper w ? w._logger : logger;
+        var baseContext = logger.GetContext();
+        _context = string.IsNullOrEmpty(baseContext) ? context : $"{baseContext}.{context}";
         _contextBytes = Encoding.UTF8.GetBytes(_context);
     }
 

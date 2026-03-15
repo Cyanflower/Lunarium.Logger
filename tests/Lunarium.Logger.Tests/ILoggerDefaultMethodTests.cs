@@ -30,11 +30,15 @@ public class ILoggerDefaultMethodTests
 
     private sealed class CapturingLogger : ILogger
     {
-        public record LogCall(LogLevel Level, string Message, string Context, Exception? Ex, object?[] Props);
+        public record LogCall(LogLevel Level, Exception? Ex, string Message, string Context, object?[] Props);
         public List<LogCall> Calls { get; } = [];
 
-        public void Log(LogLevel level, string message = "", string context = "", Exception? ex = null, params object?[] propertyValues)
-            => Calls.Add(new(level, message, context, ex, propertyValues));
+        public string GetContext() => "";
+        public ReadOnlyMemory<byte> GetContextSpan() => ReadOnlyMemory<byte>.Empty;
+
+        public void Log(LogLevel level, Exception? ex = null, string message = "", string context = "",
+                        ReadOnlyMemory<byte> contextBytes = default, string scope = "", params object?[] propertyValues)
+            => Calls.Add(new(level, ex, message, context, propertyValues));
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
@@ -117,7 +121,7 @@ public class ILoggerDefaultMethodTests
     {
         var (l, c) = Make();
         var ex = new Exception("oops");
-        l.Error("ctx", ex, "val");
+        l.Error(ex, "ctx", "val");
         c.Calls[0].Level.Should().Be(LogLevel.Error);
         c.Calls[0].Message.Should().Be("ctx");
         c.Calls[0].Ex.Should().BeSameAs(ex);
@@ -164,7 +168,7 @@ public class ILoggerDefaultMethodTests
     {
         var (l, c) = Make();
         var ex = new Exception("fatal");
-        l.Critical("crit msg", ex, "v");
+        l.Critical(ex, "crit msg", "v");
         c.Calls[0].Level.Should().Be(LogLevel.Critical);
         c.Calls[0].Message.Should().Be("crit msg");
         c.Calls[0].Ex.Should().BeSameAs(ex);
@@ -179,5 +183,92 @@ public class ILoggerDefaultMethodTests
         c.Calls[0].Level.Should().Be(LogLevel.Critical);
         c.Calls[0].Message.Should().Be("ctx msg");
         c.Calls[0].Ex.Should().BeSameAs(ex);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 6. Debug — new ex-only and ex+message overloads (added in refactoring)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Debug_ExceptionOnly_ForwardsToLog()
+    {
+        var (l, c) = Make();
+        var ex = new InvalidOperationException("dbg-ex");
+        l.Debug(ex);
+        c.Calls.Should().HaveCount(1);
+        c.Calls[0].Level.Should().Be(LogLevel.Debug);
+        c.Calls[0].Message.Should().BeEmpty();
+        c.Calls[0].Ex.Should().BeSameAs(ex);
+    }
+
+    [Fact]
+    public void Debug_ExceptionAndMessage_ForwardsToLog()
+    {
+        var (l, c) = Make();
+        var ex = new InvalidOperationException("dbg-ex");
+        l.Debug(ex, "debug context {N}", 42);
+        c.Calls.Should().HaveCount(1);
+        c.Calls[0].Level.Should().Be(LogLevel.Debug);
+        c.Calls[0].Message.Should().Be("debug context {N}");
+        c.Calls[0].Ex.Should().BeSameAs(ex);
+        c.Calls[0].Props.Should().HaveCount(1);
+        c.Calls[0].Props[0].Should().Be(42);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 7. Info — new ex-only and ex+message overloads
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Info_ExceptionOnly_ForwardsToLog()
+    {
+        var (l, c) = Make();
+        var ex = new Exception("info-ex");
+        l.Info(ex);
+        c.Calls.Should().HaveCount(1);
+        c.Calls[0].Level.Should().Be(LogLevel.Info);
+        c.Calls[0].Message.Should().BeEmpty();
+        c.Calls[0].Ex.Should().BeSameAs(ex);
+    }
+
+    [Fact]
+    public void Info_ExceptionAndMessage_ForwardsToLog()
+    {
+        var (l, c) = Make();
+        var ex = new Exception("info-ex");
+        l.Info(ex, "info context", "v1");
+        c.Calls.Should().HaveCount(1);
+        c.Calls[0].Level.Should().Be(LogLevel.Info);
+        c.Calls[0].Message.Should().Be("info context");
+        c.Calls[0].Ex.Should().BeSameAs(ex);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 8. Warning — new ex-only and ex+message overloads
+    // ─────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Warning_ExceptionOnly_ForwardsToLog()
+    {
+        var (l, c) = Make();
+        var ex = new Exception("warn-ex");
+        l.Warning(ex);
+        c.Calls.Should().HaveCount(1);
+        c.Calls[0].Level.Should().Be(LogLevel.Warning);
+        c.Calls[0].Message.Should().BeEmpty();
+        c.Calls[0].Ex.Should().BeSameAs(ex);
+    }
+
+    [Fact]
+    public void Warning_ExceptionAndMessage_ForwardsToLog()
+    {
+        var (l, c) = Make();
+        var ex = new Exception("warn-ex");
+        l.Warning(ex, "warn msg {X}", "x-val");
+        c.Calls.Should().HaveCount(1);
+        c.Calls[0].Level.Should().Be(LogLevel.Warning);
+        c.Calls[0].Message.Should().Be("warn msg {X}");
+        c.Calls[0].Ex.Should().BeSameAs(ex);
+        c.Calls[0].Props[0].Should().Be("x-val");
     }
 }

@@ -76,57 +76,65 @@ LogWriter.Return()
 
 ```
 src/Lunarium.Logger/
-├── ILogger.cs               # 公共接口（Debug/Info/Warning/Error/Critical 重载）
-├── Logger.cs                # 核心实现，internal sealed（Channel<LogEntry> + 后台任务）
+├── ILogger.cs               # 公共接口（GetContext/GetContextSpan + Debug/Info/Warning/Error/Critical 重载）
+├── IDestructurable.cs       # IDestructurable（Destructure(DestructureHelper)）、IDestructured（Destructured() → ReadOnlyMemory<byte>）
+├── DestructureHelper.cs     # 高性能自定义解构辅助类（public，包装 Utf8JsonWriter，供 IDestructurable 实现者使用）
+├── Logger.cs                # 核心实现，internal sealed（Channel<LogEntry> + 后台任务，预存 _loggerNameBytes）
 ├── LoggerBuilder.cs         # Fluent Builder，Build() 返回 ILogger，可多次调用
-├── LoggerExtensions.cs      # ForContext()/ForContext<T>()、AddConsoleSink()、AddStringChannelSink() 等扩展方法
+├── LoggerExtensions.cs      # ForContext()/ForContext<T>() 扩展方法（LoggerBuilderExtensions 已抽离）
+├── LoggerBuilderExtensions.cs  # LoggerBuilder 扩展方法（AddConsoleSink/AddFileSink/AddChannelSink 等）
 ├── SinkOutputConfig.cs      # 单个 Sink 配置（级别过滤、上下文过滤、ToJson?、IsColor?）
 ├── LogSink.cs               # Sink 结构体（internal readonly record struct）
 ├── LogLevel.cs              # Debug/Info/Warning/Error/Critical 枚举
 ├── LogUtilsAPI.cs           # LogUtils 工具类（获取时间戳）
 ├── GlobalConfigurator.cs    # 全局配置入口（Fluent API，Apply() 完成）
 ├── GlobalUsings.cs          # 全局 using
+├── GlobalConfigExtensions.cs# 占位符文件（暂未实现）
 ├── ISinkConfig.cs           # Sink 配置对象接口（含 SinkOutputConfig 引用）
 ├── Lunarium.Logger.csproj   # 主项目文件
 │
 ├── Models/
-│   └── LogEntry.cs          # 不可变日志事件（sealed，含延迟解析的 MessageTemplate）
+│   └── LogEntry.cs          # 不可变日志事件（sealed，含 ContextBytes/Scope/延迟解析的 MessageTemplate）
 │
 ├── Parser/
-│   ├── LogParser.cs         # 消息模板状态机解析器（internal，含 4096 条缓存）
-│   └── MessageTemplate.cs   # MessageTemplate / TextToken / PropertyToken
+│   ├── LogParser.cs         # 消息模板状态机解析器（internal，含 4096 条缓存，Interlocked 并发安全）
+│   └── MessageTemplate.cs   # MessageTemplate（含 OriginalMessageBytes）/ TextToken（含 TextBytes）/ PropertyToken
+│                            #   PropertyToken 含 FormatString（预构建）、PropertyNameBytes
 │                            #   类型均 public，但构造器 internal；Token 属性对外只读 public
 │
 ├── Target/
 │   ├── ILogTarget.cs        # ILogTarget（Emit+IDisposable）、IJsonTextTarget、IColorTextTarget、ILogEntryTarget
-│   ├── ConsoleTarget.cs     # 控制台输出，sealed（Error/Critical → stderr，重定向时降级为纯文本）
-│   ├── FileTarget.cs        # 文件输出，sealed（按大小 / 按天 / 叠加轮转，可选参数控制）
+│   ├── ConsoleTarget.cs     # 控制台输出，sealed（Error/Critical → stderr，缓存底层流，直接写字节）
+│   ├── FileTarget.cs        # 文件输出，sealed（按大小 / 按天 / 叠加轮转，直接写 FileStream 无中间 StreamWriter）
 │   └── ChannelTarget.cs     # ChannelTarget<T>（public abstract，用户可继承）
-│                            #   + StringChannelTarget / LogEntryChannelTarget（public sealed）
+│                            #   + StringChannelTarget（string，有 string 堆分配警告）
+│                            #   + ByteChannelTarget（byte[]，跳过 UTF-8→string 解码）
+│                            #   + LogEntryChannelTarget（透传 LogEntry）
 │                            #   + DelegateChannelTarget<T>（internal sealed）
 │
 ├── Writer/
-│   ├── LogWriter.cs         # internal abstract 基类（Render 流程 + 对象池管理）
-│   ├── LogTextWriter.cs     # internal sealed，纯文本格式
-│   ├── LogColorTextWriter.cs# internal sealed，带 ANSI 颜色的文本格式
-│   ├── LogJsonWriter.cs     # internal sealed，JSON 格式
-│   └── WriterPool.cs        # internal static，对象池（ConcurrentBag，上限 100，容量超 4KB 不回池）
+│   ├── LogWriter.cs         # internal abstract 基类（Render 流程 + 对象池管理 + RenderPropertyToken/WriteAligned/AppendPadding 虚方法）
+│   ├── LogTextWriter.cs     # internal sealed，纯文本格式（BufferWriter + UTF-8 字面量）
+│   ├── LogColorTextWriter.cs# internal sealed，带 ANSI 颜色的文本格式（ANSI 常量为 ReadOnlySpan<byte>）
+│   ├── LogJsonWriter.cs     # internal sealed，JSON 格式（Utf8JsonWriter，_scratchWriter 副缓冲区）
+│   └── WriterPool.cs        # internal static，对象池（ConcurrentBag，上限 128，容量超 32KB 不回池）
 │
 ├── Filter/
-│   └── Filter.cs            # LoggerFilter（internal sealed，上下文前缀过滤 + 2048 条缓存）
+│   └── Filter.cs            # LoggerFilter（internal sealed，上下文前缀过滤 + 2048 条缓存，Interlocked 并发安全）
 │
 ├── Internal/
+│   ├── ArrayBufferWriter.cs # BufferWriter（internal sealed，IBufferWriter<byte>，ArrayPool 不使用，自管理 byte[]）
 │   └── LogChannelBridge.cs  # LogChannelBridge<T>（internal sealed，Channel 桥接器）
 │
 ├── Wrapper/
-│   └── LoggerWrapper.cs     # LoggerWrapper（internal sealed，装饰器，为 ILogger 附加固定 context）
+│   └── LoggerWrapper.cs     # LoggerWrapper（internal sealed，扁平化装饰器，Context/ContextBytes 构造时预计算）
 │
 ├── GlobalConfig/
 │   ├── GlobalConfigLock.cs  # GlobalConfigLock（internal）
 │   ├── TimestampConfig.cs   # 时区配置（Local / UTC / Custom，internal）
 │   ├── TimestampFormatConfig.cs  # 时间戳格式（Unix / UnixMs / ISO8601 / Custom，internal）
 │   ├── DestructuringConfig.cs    # 集合自动解构开关（internal）
-│   └── JsonSerializationConfig.cs# JSON 序列化配置（内部转义、缩进、自定义 Resolver，internal）
+│   └── JsonSerializationConfig.cs# JSON 序列化配置（UnsafeRelaxedJsonEscaping、缩进、自定义 Resolver，internal）
 │
 ├── InternalLoggerUtils/
 │   └── InternalLogger.cs    # 库内部错误输出（internal static，不走 Channel，直接到控制台）
@@ -159,6 +167,40 @@ src/Lunarium.Logger/
 
 属性名规则：首字符 Letter 或 `_`，后续可含字母/数字/下划线/`.`（`.` 后不能接数字或连续 `.`）。
 
+### ILogger.Log() 签名
+
+```csharp
+void Log(LogLevel level, Exception? ex = null, string message = "", string context = "",
+         ReadOnlyMemory<byte> contextBytes = default, string scope = "", params object?[] propertyValues);
+```
+
+- `contextBytes`：context 的 UTF-8 预编码字节，供 Writer 层零分配使用；传 `default` 时 Logger/LoggerWrapper 自动填充缓存好的字节
+- `scope`：由 MEL 适配器填充的作用域信息，业务代码无需手动提供
+- `Exception?`-first 重载：Debug/Info/Warning 新增 `(Exception? ex)` 和 `(Exception? ex, string message, params...)` 两个重载
+
+### ILogger.GetContext() / GetContextSpan()
+
+```csharp
+string GetContext();
+ReadOnlyMemory<byte> GetContextSpan();
+```
+
+供 `LoggerWrapper` 构造时读取上层 context、拼接并预编码 UTF-8。Logger 本身 `GetContext()` 返回空字符串，`GetContextSpan()` 返回 logger name 的 UTF-8 bytes。
+
+### LogEntry 字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `LogLevel` | `LogLevel` | 日志级别 |
+| `Timestamp` | `DateTimeOffset` | 时间戳 |
+| `Message` | `string` | 原始消息模板字符串 |
+| `Properties` | `object?[]` | 模板属性值 |
+| `Context` | `string` | 上下文（来源模块） |
+| `ContextBytes` | `ReadOnlyMemory<byte>` | Context 的 UTF-8 预编码字节 |
+| `Scope` | `string` | MEL Scope 信息 |
+| `Exception` | `Exception?` | 关联异常 |
+| `MessageTemplate` | `MessageTemplate` | 延迟解析的模板（Emit 时填充） |
+
 ### Context 约定
 
 Context 应为静态字符串（类名、模块名），不应含动态值（会导致 Filter 缓存爆炸），动态值应位于日志内容本身。
@@ -173,6 +215,8 @@ logger.Info("Processing", $"Order.{orderId}"); // 上下文动态变化
 ```
 
 多重 `ForContext` 时路径用 `.` 分隔：`"A"` → `ForContext("B")` → Context = `"A.B"`。
+
+**LoggerWrapper 扁平化**：多层 `ForContext` 不再形成链式 wrapper。构造时直接解包到根 Logger，Context 字符串和 UTF-8 bytes 在构造时一次性拼接缓存，后续 Log 调用零分配。
 
 ### SinkOutputConfig 过滤逻辑
 
@@ -272,26 +316,67 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 ```
 
 > ⚠️ 必须以 Release 模式运行，Debug 模式结果无意义。结果自动输出至 `BenchmarkDotNet.Artifacts/`。
-> ⚠️ AI 助手应当尽量避免执行 Benchmarks 测试，在执行前必须征得同意并确认，该命令执行耗时较长(10min +)。
+> ⚠️ AI 助手应当尽量避免执行 Benchmarks 测试，在执行前必须征得同意并确认，该命令执行耗时较长(10min +)，可能会导致 AI Agent 前端认为超时。
 
-### 测试现状（2026-03-14）
+### 性能参考数据（2026-03-15，i7-8750H，.NET 10.0）
 
-- **总测试数**: 503，全部通过，0 失败，0 跳过（482 单元 + 21 集成）
-- **行覆盖率**: 91.2%（1918/2102 行）
-- **分支覆盖率**: 86.9%（615/707 分支）
-- **方法覆盖率**: 98.6%（296/300 个方法）
+> 历史记录见 `BenchmarkReports/History/`，最新为 `Dev-2026-03-15-Run.006`。
+
+**LoggerFilter / LogParser（热路径）**
+
+| 场景 | 耗时 | 分配 |
+|------|------|------|
+| Filter 缓存命中（各规则组合） | ~9 ns | 0 |
+| Filter 缓存未命中（超出 2048 条清空） | ~243 ns | 218 B |
+| Parser 缓存命中（各模板复杂度） | 11–19 ns | 0 |
+| Parser 缓存未命中（超出 4096 条清空） | ~1,305 ns | 1,413 B |
+
+**LogWriter 渲染**
+
+| 场景 | 耗时 | 分配 |
+|------|------|------|
+| Text / Color（无论属性数） | 320–600 ns | **32 B 固定** |
+| JSON（无论属性数） | 470–750 ns | **64 B 固定** |
+| JSON `{@Object}` IDestructured 路径 | ~602 ns | 64 B |
+| JSON `{@Object}` JsonSerializer 回退路径 | ~953 ns | 656 B |
+| WriterPool Get + Return（池化） | ~77 ns | 0 |
+
+**Logger 调用侧吞吐**
+
+| 场景 | 耗时 | 分配 |
+|------|------|------|
+| 无属性 | ~186 ns | 113 B |
+| 单属性 | ~192 ns | 146 B |
+| 五属性 | ~212 ns | 227 B |
+| ForContext 包装器 | ~199 ns | 146 B |
+
+> 调用侧的分配主要来自 `params object?[]` boxing，是当前 API 的固有成本。
+
+**ChannelTarget**
+
+| Target | 耗时 | 分配 |
+|--------|------|------|
+| `LogEntryChannelTarget` | ~46 ns | 0 |
+| `ByteChannelTarget` | ~915 ns | 128 B |
+| `StringChannelTarget` | ~1,130 ns | 192 B |
+
+### 测试现状（2026-03-15）
+
+- **行覆盖率**: 91.2%（2214/2426 行）
+- **分支覆盖率**: 87.9%（694/789 分支）
+- **方法覆盖率**: 98.8%（340/344 个方法）
 
 覆盖率较低的模块（< 90%）：
 
 | 模块 | 覆盖率 |
 |------|--------|
 | `FileTarget` | 78.1% |
-| `LogWriter` | 78.4% |
-| `Logger` | 81.2% |
 | `LoggerBuilder` | 81.8% |
-| `LogColorTextWriter` | 84.1% |
+| `Logger` | 83.1% |
+| `LogWriter` | 83.1% |
+| `LogColorTextWriter` | 87.0% |
 | `InternalLogger` | 89.3% |
-| `BufferWriterDiagnostics` | 75% |
+| `LunariumMsLoggerAdapter` | 89.4% |
 
 覆盖率报告生成：`reportgenerator` → `CoverageReport/Summary.txt`
 
@@ -306,9 +391,9 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 - [x] 多 Sink 支持（每个 Sink 独立配置过滤规则）
 - [x] ConsoleTarget（彩色/纯文本/JSON，Error+ → stderr，输出重定向自动降级）
 - [x] FileTarget（统一文件 Sink，支持按大小轮转 / 按天轮转 / 两者叠加，可选参数控制，扩展方法：`AddSizedRotatingFileSink` / `AddTimedRotatingFileSink` / `AddRotatingFileSink`）
-- [x] ChannelTarget 三变体：`StringChannelTarget`（string，彩色/纯文本/JSON）、`LogEntryChannelTarget`（透传 LogEntry）、`DelegateChannelTarget<T>`（自定义转换，internal）
-- [x] LogWriter 对象池（`WriterPool`，`ConcurrentBag`，上限 100，容量超限不回池）
-- [x] ForContext 装饰器（`LoggerWrapper`，可嵌套）
+- [x] ChannelTarget 四变体：`StringChannelTarget`（string，有 string 堆分配）、`ByteChannelTarget`（byte[]，跳过 UTF-8→string 解码）、`LogEntryChannelTarget`（透传 LogEntry）、`DelegateChannelTarget<T>`（自定义转换，internal）
+- [x] LogWriter 对象池（`WriterPool`，`ConcurrentBag`，上限 128，容量超 32KB 不回池，拒绝回池时调用 `DisposeAndReturnArrayBuffer()`）
+- [x] ForContext 装饰器（`LoggerWrapper`，扁平化，Context/ContextBytes 构造时预计算，多层嵌套零额外分配）
 - [x] GlobalConfigurator（一次性全局配置，Fluent API）
 - [x] 单例 Logger 保证（构建锁 + 配置锁）
 - [x] Microsoft.Extensions.Logging 桥接（`LunariumLoggerProvider`，支持 DI 注册）
@@ -318,16 +403,21 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 - [x] 扩展方法：`AddStringChannelSink`、`AddLogEntryChannelSink`、`AddChannelSink<T>`（自定义转换）
 - [x] AOT 兼容性支持（`IsAotCompatible=true`；`{@Object}` 解构序列化统一走 `LogWriter.TrySerializeToJson()`，附 `[UnconditionalSuppressMessage]`；`IsCommonCollectionType` 改用 `obj is Array` 消除运行时反射）
 - [x] `GlobalConfigurator.UseJsonTypeInfoResolver()`（注册 Source Generated `JsonSerializerContext` / `IJsonTypeInfoResolver`，AOT 环境下 `{@Object}` 解构无需反射；多 Context 可通过 `JsonTypeInfoResolver.Combine()` 在外部合并后传入）
+- [x] `IDestructurable` 接口（`Destructure(DestructureHelper helper)`，通过 `DestructureHelper` 包装的 `Utf8JsonWriter` 直接写缓冲区，零中间字符串分配）
+- [x] `IDestructured` 接口（`Destructured() → ReadOnlyMemory<byte>`，返回预序列化字节，极致零分配）
+- [x] `ILogger` 增加 `GetContext()` / `GetContextSpan()` 方法，支持 LoggerWrapper 构造时读取父级 context
+- [x] `LogEntry` 增加 `ContextBytes`（UTF-8 预编码字节）和 `Scope`（MEL 作用域）字段
+- [x] `PropertyToken` 预构建 `FormatString`，`TextToken`/`PropertyToken` 预编码 UTF-8 bytes，减少渲染时重复计算
 
 ---
 
-## 性能优化（2026-03-13）
+## 性能优化架构
 
 ### BufferWriter 字节缓冲层
 
-`Writer/LogWriter` 的底层从 `StringBuilder` 改为基于 `ArrayPool<byte>.Shared` 的 `BufferWriter`（[Internal/BufferWriter.cs](src/Lunarium.Logger/Internal/BufferWriter.cs)），消除 UTF-16 → UTF-8 的中间转换开销。
+`Writer/LogWriter` 的底层使用自管理 `byte[]` 的 `BufferWriter`（[Internal/ArrayBufferWriter.cs](src/Lunarium.Logger/Internal/ArrayBufferWriter.cs)，类名为 `BufferWriter`），直接操作 UTF-8 字节，避免 UTF-16 → UTF-8 的中间转换开销。
 
-#### 高级 API 新增
+#### BufferWriter API
 
 | 方法 | 说明 |
 |------|------|
@@ -345,25 +435,21 @@ dotnet run -c Release --project benchmarks/Lunarium.Logger.Benchmarks -- --filte
 | `Length` | 等价于 `WrittenCount` |
 | `this[int]` | 字节索引器（JSON 尾部逗号检查） |
 
-#### 对象池化改造
+#### 对象池化
 
-[Writer/WriterPool.cs](src/Lunarium.Logger/Writer/WriterPool.cs) 的健康度检查从 `_stringBuilder.Capacity` 改为 `_bufferWriter.Capacity`，语义不变（容量上限超过 4KB 不回池）。
+[Writer/WriterPool.cs](src/Lunarium.Logger/Writer/WriterPool.cs) 的健康度检查基于 `_bufferWriter.Capacity`；容量阈值 **32KB**（`Utf8JsonWriter` 贪婪申请缓冲，较小阈值会导致 `LogJsonWriter` 永远无法归池）；池上限 **128**；被拒绝入池的对象调用 `DisposeAndReturnArrayBuffer()` 归还底层数组。
 
 ---
 
 ### IUtf8SpanFormattable 零分配格式化
 
-文本/JSON Writer 的时间戳、数值、Guid 等类型改用 `AppendFormattable<T>`，完全跳过 `ToString()` 分配。
+文本/JSON Writer 的时间戳、数值、Guid 等类型通过 `AppendFormattable<T>` 直接格式化到 UTF-8 字节，跳过 `ToString()` 分配。
 
 #### LogTextWriter / LogColorTextWriter
 
-`WriteTimestamp` 改造：
+`WriteTimestamp` 使用 `IUtf8SpanFormattable` 直接写 UTF-8：
 
 ```csharp
-// 旧：string 插值
-_bufferWriter.Append($"[{timestamp:O}] ");
-
-// 新：IUtf8SpanFormattable 直接写 UTF-8
 _bufferWriter.Append('[');
 _bufferWriter.AppendFormattable(timestamp, "O");
 _bufferWriter.Append("] ");
@@ -373,37 +459,26 @@ _bufferWriter.Append("] ");
 
 #### LogJsonWriter
 
-已重构为使用 **`Utf8JsonWriter`**（.NET BCL）代替手动构建，具有以下特点：
+使用 **`Utf8JsonWriter`**（.NET BCL）构建 JSON 输出：
 - **正确性**：自动处理所有 JSON 转义规则，完美支持 **Surrogate Pairs（Emoji）**。
-- **高性能**：通过 `JsonWriter.Reset(_bufferWriter)` 实现池化复用，零分配。
-- **解构优化**：`{@Object}` 解构直接调用 `JsonSerializer.Serialize(jsonWriter, value)` 写入缓冲区，消除中间字符串。
-- **配置同步**：使用 `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` 以支持中文与 Emoji 不被过度转义。
-- **零分配格式化**：时间戳、数值等依然通过 `Utf8JsonWriter` 的底层 IUtf8SpanFormattable 路径（内部实现）实现零分配写入。
-
-
-`AppendJsonStringContent` 的控制字符转义（`c < 0x20`）改用：
-
-```csharp
-// 旧：ToString("x4") + Append
-_bufferWriter.Append("\\u");
-_bufferWriter.Append(((int)c).ToString("x4"));
-
-// 新：零分配十六进制格式化
-_bufferWriter.Append("\\u");
-_bufferWriter.AppendFormattable((int)c, "x4");
-```
+- **高性能**：主 `_jsonWriter` 通过 `Reset(_bufferWriter)` 绑定 BufferWriter 实现池化复用，零分配；`_scratchWriter`（副 BufferWriter）用于先渲染 RenderedMessage 再作为 JSON string 值写入。
+- **解构优化**：`IDestructurable` → 调用 `Destructure(DestructureHelper)` 写 JSON 后通过 `WriteRawValue` 嵌入；`IDestructured` → 直接 `WriteRawValue(bytes)`；普通对象 → `JsonSerializer.Serialize(jsonWriter, value)`，消除中间字符串。
+- **JSON Level 字段值**：`Info` 级别对应 `"Information"`（对齐 MEL 约定），其余同名。
+- **配置**：使用 `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`，中文、Emoji 不被过度转义。
+- **零分配格式化**：时间戳通过 `stackalloc byte[64]` + `TryFormat` 直接格式化后由 `Utf8JsonWriter.WriteString` 写入，数值类型走 `WriteNumber*` 零分配。
+- **独立 TryReset**：`LogJsonWriter` 重写 `TryReset`，同时检查 `_bufferWriter` 和 `_scratchWriter` 容量，超过 32KB 不归池。
 
 ---
 
 ### Stream 输出层
 
-`LogWriter.FlushTo(Stream)` 新增重载（[Writer/LogWriter.cs:123](src/Lunarium.Logger/Writer/LogWriter.cs#L123)），直接将 `BufferWriter` 的已写字节写入 `Stream`，零拷贝零分配。
+`LogWriter.FlushTo(Stream)`（[Writer/LogWriter.cs:123](src/Lunarium.Logger/Writer/LogWriter.cs#L123)）直接将 `BufferWriter` 的已写字节写入 `Stream`，零拷贝零分配。
 
 ```csharp
 internal void FlushTo(Stream stream) => _bufferWriter.FlushTo(stream);
 ```
 
-保留原 `FlushTo(TextWriter)` 作为降级路径（[Writer/LogWriter.cs:134](src/Lunarium.Logger/Writer/LogWriter.cs#L134)）：
+`FlushTo(TextWriter)` 为降级路径（[Writer/LogWriter.cs:134](src/Lunarium.Logger/Writer/LogWriter.cs#L134)）：
 
 ```csharp
 internal void FlushTo(TextWriter output)
@@ -424,7 +499,7 @@ internal void FlushTo(TextWriter output)
 }
 ```
 
-#### ConsoleTarget 改造
+#### ConsoleTarget
 
 [Target/ConsoleTarget.cs](src/Lunarium.Logger/Target/ConsoleTarget.cs) 构造时缓存 `Console.OpenStandardOutput()` / `Console.OpenStandardError()` 流：
 
@@ -439,37 +514,33 @@ public ConsoleTarget()
 }
 ```
 
-`Emit` 调用 `logWriter.FlushTo(stream)` 直接写入字节流。`Dispose` 已改为不执行任何操作（由运行时管理进程句柄）。
+`Emit` 调用 `logWriter.FlushTo(stream)` 直接写入字节流。`Dispose` 不执行任何操作（由运行时管理进程句柄）。
 测试支持：提供 `internal ConsoleTarget(Stream, Stream)` 构造函数以支持 `MemoryStream` 注入测试。
 
-#### FileTarget 改造
+#### FileTarget
 
-[Target/FileTarget.cs](src/Lunarium.Logger/Target/FileTarget.cs) 的 `StreamWriter? _writer` 改为 `FileStream? _fileStream`，消除中间缓冲层：
+[Target/FileTarget.cs](src/Lunarium.Logger/Target/FileTarget.cs) 使用 `FileStream? _fileStream` 直接写入，无中间 `StreamWriter` 缓冲层：
 
 ```csharp
 private FileStream? _fileStream;
 
 private void OpenFile(DateTimeOffset timestamp)
 {
-    // 旧：new StreamWriter(fs, Encoding.UTF8, bufferSize: 2048)
-    // 新：直接 FileStream
     _fileStream = new FileStream(
         currentFilePath,
         FileMode.Append,
         FileAccess.Write,
         FileShare.Read | FileShare.Delete,
-        bufferSize: 4096,  // Writer 缓冲大小
+        bufferSize: 4096,
         FileOptions.None);
 }
 ```
-
-`_writer.Flush()` 改为 `_fileStream.Flush()`，所有引用更新为 `_fileStream`。
 
 ---
 
 ### ByteChannelTarget 字节流 Channel
 
-[Target/ChannelTarget.cs](src/Lunarium.Logger/Target/ChannelTarget.cs) 新增 `ByteChannelTarget`（[ChannelTarget.cs:93](src/Lunarium.Logger/Target/ChannelTarget.cs#L93)），将日志格式化为 UTF-8 字节数组写入 Channel：
+`ByteChannelTarget`（[ChannelTarget.cs:93](src/Lunarium.Logger/Target/ChannelTarget.cs#L93)）将日志格式化为 UTF-8 字节数组写入 Channel：
 
 ```csharp
 public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
@@ -494,7 +565,7 @@ public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
 }
 ```
 
-`LogWriter.GetWrittenBytes()` 新增方法（[Writer/LogWriter.cs:143](src/Lunarium.Logger/Writer/LogWriter.cs#L143)），返回 `BufferWriter.WrittenSpan.ToArray()`。
+`LogWriter.GetWrittenBytes()`（[Writer/LogWriter.cs:143](src/Lunarium.Logger/Writer/LogWriter.cs#L143)）返回 `BufferWriter.WrittenSpan.ToArray()`。
 
 **性能对比**：
 
@@ -508,7 +579,47 @@ public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
 
 **StringChannelTarget 性能警告**：
 
-`StringChannelTarget` 的 XML 文档已标注性能提示：每次 Emit 必然产生一次 string 堆分配（`Encoding.UTF8.GetString`）。若消费者直接写网络/文件，建议改用 `ByteChannelTarget`。
+`StringChannelTarget` 每次 Emit 必然产生一次 string 堆分配（`Encoding.UTF8.GetString`）。若消费者直接写网络/文件，建议改用 `ByteChannelTarget`。
+
+---
+
+### LogWriter 基类虚方法
+
+`LogWriter` 基类定义以下虚方法，子类可按需重写：
+
+| 虚方法 | 默认行为 |
+|--------|----------|
+| `RenderPropertyToken(PropertyToken, object?[], int)` | 完整渲染一个属性 token（含 null/解构/IUtf8SpanFormattable/格式化） |
+| `GetPropertyValue(object?[], int, out bool)` | 按索引取属性值 |
+| `WriteAligned(int, IUtf8SpanFormattable, string?)` | 带对齐的零分配格式化写入 |
+| `AppendPadding(int)` | 写 N 个空格（≤32 走 SpacePool 直接 MemoryCopy） |
+
+`LogColorTextWriter` 重写 `RenderPropertyToken` 以加 ANSI 颜色；`LogJsonWriter` 重写所有四个方法以写入 `_scratchWriter` 副缓冲区。
+
+### 自定义解构接口（IDestructurable / IDestructured）
+
+`{@Object}` 解构支持两个高性能接口（优先级高于 `JsonSerializer.Serialize` 回退路径）：
+
+**`IDestructurable`**（最高性能，支持任意 JSON 结构）：
+```csharp
+public interface IDestructurable {
+    void Destructure(DestructureHelper helper);
+}
+```
+`DestructureHelper` 包装 `Utf8JsonWriter`（与 Writer 层共享缓冲区），提供 `WriteStartObject/WriteEndObject/WriteString/WriteNumber/...` 等 API，直接写到最终输出缓冲区，无额外分配。
+
+**`IDestructured`**（极致零分配，适合预序列化场景）：
+```csharp
+public interface IDestructured {
+    ReadOnlyMemory<byte> Destructured();
+}
+```
+返回已编码的 UTF-8 JSON bytes（静态常量、缓存字节块等），通过 `Utf8JsonWriter.WriteRawValue` / `BufferWriter.Append` 直接嵌入输出，零拷贝零分配。
+
+**优先级顺序**（文本 Writer 和 JSON Writer 一致）：
+1. `IDestructurable` → 调用 `Destructure(helper)`
+2. `IDestructured` → 调用 `Destructured()`
+3. 默认回退 → `JsonSerializer.Serialize()`（AOT 下可能降级为 `ToString()`）
 
 ---
 
@@ -521,6 +632,7 @@ public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
 | 消费层 | `ILogger`、`LogLevel`、`LogUtils` | 业务代码唯一接触面，`Logger` 本身是 `internal sealed` |
 | 构建层 | `LoggerBuilder`、`GlobalConfigurator`、`SinkOutputConfig`、`ISinkConfig` | 启动期一次性配置，均有单次锁保护 |
 | 扩展层 | `ILogTarget`、`ChannelTarget<T>`、`IJsonTextTarget`、`IColorTextTarget`、`ILogEntryTarget` | 自定义 Sink 的扩展点 |
+| 解构层 | `IDestructurable`、`IDestructured`、`DestructureHelper` | 高性能自定义 `{@Object}` 解构扩展点 |
 | 数据层 | `LogEntry`、`MessageTemplate`、`PropertyToken`、`TextToken` | 类型公开供自定义 Sink 读取；构造器 `internal`，禁止外部伪造 |
 | 集成层 | `LunariumLoggerProvider`、`LunariumLoggerExtensions`、`LunariumLoggerConversionExtensions` | MEL 桥接，非 sealed 可继承重写 `CreateLogger` |
 
@@ -550,6 +662,10 @@ public sealed class ByteChannelTarget : ChannelTarget<byte[]>, IJsonTextTarget
 | `LunariumLoggerProvider.Dispose()` 不销毁 Logger | 谁创建谁管理生命周期，DI 容器不拥有 Logger |
 | Writer 层全 `internal` | 输出格式由库统一管控，不允许外部继承扩展渲染逻辑 |
 | `GlobalConfigurator` 不可扩展 | 时区/时间戳格式是跨 Sink 的全局行为，需强一致性 |
+| `LoggerWrapper` 扁平化 | 构造时解包至根 Logger，避免多层嵌套触发链式 slow path；Context/ContextBytes 一次性拼接 |
+| `ILogger.Log()` 含 `contextBytes` 参数 | Writer 层可直接取 UTF-8 bytes 写入 BufferWriter，无需每次编码 |
+| `PropertyToken.FormatString` 预构建 | 消除渲染时每次 `BuildFormatString` 的 stackalloc 或堆分配 |
+| `TextToken.TextBytes` / `PropertyToken.PropertyNameBytes` 预编码 | 渲染时直接 `Append(bytes)`，跳过 UTF-8 编码 |
 
 ### AOT 兼容性
 
@@ -575,4 +691,5 @@ GlobalConfigurator.Configure()
 
 1. **`GlobalConfigurator` 无自定义钩子**：无法注入自定义时间戳格式化策略，只能在自定义 `ILogTarget` 内部自行处理 `LogEntry.Timestamp`。
 2. **Writer 层全封闭**：无法继承扩展输出格式，自定义格式须从 `ILogTarget` 层重新实现渲染逻辑。
-3. **AOT 下未注册类型静默降级**：`{@Object}` 解构遇到未在 `JsonSerializerContext` 中注册的类型时，输出退化为 `ToString()`，无运行时报错。
+3. **AOT 下未注册类型静默降级**：`{@Object}` 解构遇到未在 `JsonSerializerContext` 中注册的类型时，输出退化为 `ToString()`，无运行时报错。（实现了 `IDestructurable`/`IDestructured` 的类型不受此限制）
+4. **`ILogger.Log()` 的 `contextBytes` 参数**：慢速路径（传入额外即时 context 时）仍会有一次 `string` 拼接和一次 `UTF8.GetBytes` 分配；正常 `ForContext` 使用走零分配快速路径。
